@@ -1,0 +1,1408 @@
+<title>点词阅读器原型</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&display=swap">
+<style>
+/* Layout: a slim review bar on top; below it a device frame, scaled to fit, holds the whole app (shelf → reader). */
+:root{
+  --pg-bg:#E6E7EA; --pg-fg:#1C1E22; --pg-muted:#646973; --pg-line:#CDD0D6; --pg-chip:#FFFFFF; --pg-accent:#2A57C9; --bezel:#0F1012;
+  --ui:-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Hiragino Sans GB","Noto Sans SC","Microsoft YaHei",Roboto,"Helvetica Neue",sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--pg-bg:#131417;--pg-fg:#E4E6EA;--pg-muted:#989DA6;--pg-line:#2A2D33;--pg-chip:#1F2126;--pg-accent:#86A6FF;--bezel:#000000;color-scheme:dark}}
+:root[data-theme="dark"]{--pg-bg:#131417;--pg-fg:#E4E6EA;--pg-muted:#989DA6;--pg-line:#2A2D33;--pg-chip:#1F2126;--pg-accent:#86A6FF;--bezel:#000000;color-scheme:dark}
+
+*,*::before,*::after{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--pg-bg);color:var(--pg-fg);font-family:var(--ui);display:flex;flex-direction:column;overflow:hidden}
+button{font:inherit;color:inherit;cursor:pointer}
+:focus-visible{outline:2px solid var(--pg-accent);outline-offset:2px}
+
+/* ---------- review bar ---------- */
+.bar{flex:none;display:flex;align-items:center;flex-wrap:wrap;gap:10px 18px;padding:10px 16px;border-bottom:1px solid var(--pg-line)}
+.brand{display:flex;align-items:baseline;gap:8px;white-space:nowrap}
+.brand b{font-size:15px;font-weight:650}
+.brand span{font-size:12px;color:var(--pg-muted)}
+.devs{display:flex;gap:2px;padding:2px;background:var(--pg-chip);border:1px solid var(--pg-line);border-radius:10px;overflow-x:auto;max-width:100%;scrollbar-width:none}
+.devs::-webkit-scrollbar{display:none}
+.devs button{flex:none;border:0;background:none;padding:6px 11px;border-radius:8px;font-size:13px;font-weight:500;color:var(--pg-muted);white-space:nowrap}
+.devs button.on{background:var(--pg-bg);color:var(--pg-fg);box-shadow:0 1px 2px rgba(0,0,0,.14)}
+.hint{margin:0 0 0 auto;font-size:12.5px;color:var(--pg-muted)}
+.hint b{font-weight:600;color:var(--pg-fg)}
+@media (max-width:980px){.hint{display:none}}
+@media (max-width:560px){.bar{padding:8px 12px;gap:8px}.brand span{display:none}}
+
+/* ---------- device ---------- */
+.stage{flex:1;min-height:0;position:relative;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.dwrap{position:relative;flex:none}
+.device{position:absolute;left:0;top:0;transform-origin:0 0;background:var(--bezel);box-shadow:0 40px 80px -30px rgba(0,0,0,.45),inset 0 0 0 1.5px rgba(255,255,255,.07)}
+.device[data-dev="fit"]{background:transparent;box-shadow:none}
+.island{position:absolute;top:11px;left:50%;width:124px;height:36px;margin-left:-62px;border-radius:20px;background:#000;z-index:60;pointer-events:none}
+.device[data-kind="hole"] .island{top:12px;width:13px;height:13px;margin-left:-6.5px;border-radius:50%}
+.device[data-kind="none"] .island{display:none}
+.homebar{position:absolute;left:50%;bottom:8px;width:136px;height:5px;margin-left:-68px;border-radius:3px;background:rgba(128,128,128,.55);z-index:60;pointer-events:none}
+.device[data-kind="hole"] .homebar{width:110px;margin-left:-55px;height:4px;bottom:7px}
+.device[data-dev="ipad"] .homebar,.device[data-dev="ipadl"] .homebar{width:300px;margin-left:-150px}
+.device[data-dev="fit"] .homebar{display:none}
+
+/* ---------- app themes (reading theme = data-t, app chrome = data-ui) ---------- */
+.screen{
+  position:relative;overflow:hidden;isolation:isolate;-webkit-text-size-adjust:100%;
+  --bg:#FFFFFF;--ink:#1B1B1D;--ink2:#6E6E73;--faint:#A0A0A6;--rule:#E6E6EA;--hl:rgba(47,99,208,.16);--shl:rgba(47,99,208,.09);--accent:#2F63D0;
+  --surface:#FFFFFF;--sheet:#F6F6F8;--chip:#FFFFFF;--tip-bg:#1E1F23;--tip-ink:#F4F4F6;--chrome:rgba(255,255,255,.88);--shadow:rgba(20,22,30,.24);
+  --u-bg:#F5F6F8;--u-fg:#16171A;--u-muted:#6D717A;--u-line:#E2E4E8;--u-card:#FFFFFF;--u-accent:#2F63D0;--u-bar:rgba(245,246,248,.9);
+  background:var(--u-bg);
+}
+.screen[data-t="paper"]{--bg:#F6EEDD;--ink:#3A2D21;--ink2:#7A6650;--faint:#A8937A;--rule:#E4D6BD;--hl:rgba(168,110,32,.2);--shl:rgba(168,110,32,.11);--accent:#8C5A1C;--surface:#FFFAF0;--sheet:#F0E6D2;--chip:#FFFAF0;--tip-bg:#3A2D21;--tip-ink:#FBF3E3;--chrome:rgba(246,238,221,.9);--shadow:rgba(60,40,15,.24)}
+.screen[data-t="quiet"]{--bg:#4A4A4E;--ink:#DEDEE0;--ink2:#AFAFB4;--faint:#8C8C92;--rule:#5E5E63;--hl:rgba(255,212,120,.24);--shl:rgba(255,255,255,.1);--accent:#FFD27A;--surface:#5B5B60;--sheet:#545458;--chip:#626267;--tip-bg:#EDEDEF;--tip-ink:#1E1E21;--chrome:rgba(74,74,78,.9);--shadow:rgba(0,0,0,.38)}
+.screen[data-t="night"]{--bg:#0F0F10;--ink:#C8C8CD;--ink2:#8B8B91;--faint:#606066;--rule:#252528;--hl:rgba(122,160,255,.24);--shl:rgba(122,160,255,.13);--accent:#8FB0FF;--surface:#1D1D20;--sheet:#18181B;--chip:#242428;--tip-bg:#2D2D31;--tip-ink:#EDEDF0;--chrome:rgba(15,15,16,.88);--shadow:rgba(0,0,0,.6)}
+.screen[data-ui="dark"]{--u-bg:#0E0F11;--u-fg:#ECEDEF;--u-muted:#8E929A;--u-line:#25272C;--u-card:#1A1B1F;--u-accent:#8FB0FF;--u-bar:rgba(14,15,17,.9)}
+.screen :focus-visible{outline-color:var(--accent)}
+.screen svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+[data-ic]{display:inline-grid;place-items:center}
+
+/* fake status bar */
+.sbar{position:absolute;top:0;left:0;right:0;height:var(--it);display:flex;align-items:center;justify-content:space-between;padding:0 34px 0 42px;font:600 15px/1 var(--ui);color:var(--u-fg);z-index:30;pointer-events:none;font-variant-numeric:tabular-nums}
+.device[data-kind="none"] .sbar{padding:0 22px;font-size:13px}
+.device[data-dev="fit"] .sbar{display:none}
+.batt{width:25px;height:12px;border:1.5px solid currentColor;border-radius:4px;padding:1.5px;opacity:.9}
+.batt i{display:block;height:100%;width:72%;background:currentColor;border-radius:1.5px}
+
+/* ---------- library views ---------- */
+.view{position:absolute;inset:0;overflow-y:auto;background:var(--u-bg);color:var(--u-fg);font-family:var(--ui);padding:calc(var(--it) + 6px) 20px calc(var(--ib) + 86px);scrollbar-width:none;z-index:1}
+.view::-webkit-scrollbar{display:none}
+.screen.wide .view{padding-left:44px;padding-right:44px}
+.v-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:8px 0 14px}
+.v-head h1{margin:0;font-size:32px;font-weight:700;letter-spacing:-.01em}
+.v-act{display:flex;gap:2px;align-items:center}
+.view .ib{color:var(--u-fg)}
+.v-sub{font-size:20px;font-weight:700;margin:28px 0 14px}
+.pill{border:1px solid var(--u-line);background:var(--u-card);border-radius:16px;padding:6px 14px;font-size:14px;color:var(--u-accent)}
+
+.cont{width:100%;display:flex;gap:16px;align-items:center;border:0;background:var(--u-card);border-radius:16px;padding:14px;text-align:left;box-shadow:0 0 0 1px var(--u-line)}
+.screen.wide .cont{max-width:560px}
+.cont-cv{width:84px;flex:none}
+.cont-i{flex:1;min-width:0}
+.cont .k{font-size:12px;font-weight:600;letter-spacing:.06em;color:var(--u-accent)}
+.cont .t{font:500 22px/1.15 "EB Garamond",Georgia,serif;margin-top:4px}
+.cont .a{font-size:13px;color:var(--u-muted);margin-top:3px}
+.pbar{height:4px;border-radius:2px;background:var(--u-line);margin-top:14px;overflow:hidden}
+.pbar i{display:block;height:100%;width:0;background:var(--u-accent);border-radius:2px}
+.cont .m{font-size:12px;color:var(--u-muted);margin-top:6px;font-variant-numeric:tabular-nums}
+
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(128px,1fr));gap:22px 18px}
+.screen.wide .grid{grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:30px 26px}
+.book{border:0;background:none;padding:0;text-align:left;display:flex;flex-direction:column;gap:8px;min-width:0}
+.bk-t{font-size:13.5px;font-weight:600;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bk-m{font-size:12px;color:var(--u-muted);margin-top:-5px}
+
+.cover{container-type:inline-size;width:100%;aspect-ratio:2/3;border-radius:3px 7px 7px 3px;position:relative;overflow:hidden;background:var(--cv-bg);color:var(--cv-ink);box-shadow:0 1px 1px rgba(0,0,0,.18),0 12px 22px -12px rgba(0,0,0,.5)}
+.cover::before{content:"";position:absolute;top:0;bottom:0;left:0;width:7%;background:linear-gradient(90deg,rgba(0,0,0,.24),rgba(255,255,255,.08) 60%,transparent)}
+.cv{position:absolute;inset:0;padding:16cqw 11cqw 11cqw 15cqw;display:flex;flex-direction:column;justify-content:space-between}
+.cv-t{font:500 13.5cqw/1.02 "EB Garamond",Georgia,serif;letter-spacing:-.01em;text-wrap:balance}
+.cv-a{font:600 5.4cqw/1.25 var(--ui);letter-spacing:.14em;text-transform:uppercase;opacity:.8}
+.cv-rule{height:1px;background:currentColor;opacity:.45;width:30%;margin-top:6cqw}
+.cv-pp{--cv-bg:#2F4636;--cv-ink:#EEE5CF}
+.cv-fr{--cv-bg:#252B35;--cv-ink:#D5DBE4}
+.cv-gg{--cv-bg:#13213B;--cv-ink:#D9B770}
+.cv-ps{--cv-bg:#EEF2F1;--cv-ink:#154852}
+.cv-ps .cv{border-top:9cqw solid #1F7A8C}
+.cv-al{--cv-bg:#3A3355;--cv-ink:#EFE7FF}
+
+.v-meta{font-size:13px;color:var(--u-muted);margin:-8px 0 12px}
+.sfield{display:flex;align-items:center;gap:8px;background:var(--chip);border:1px solid var(--rule);border-radius:10px;padding:0 10px;flex:1;min-width:0}
+.sfield svg{width:18px;height:18px;color:var(--ink2)}
+.sfield input{flex:1;min-width:0;border:0;background:none;font:15px var(--ui);color:var(--ink);padding:9px 0;outline:none}
+.view .sfield{background:var(--u-card);border-color:var(--u-line)}
+.view .sfield svg{color:var(--u-muted)}
+.view .sfield input{color:var(--u-fg)}
+.vlist{list-style:none;margin:14px 0 0;padding:0;display:flex;flex-direction:column;gap:10px}
+.vi{display:flex;align-items:flex-start;background:var(--u-card);border-radius:14px;box-shadow:0 0 0 1px var(--u-line)}
+.vi-main{flex:1;min-width:0;border:0;background:none;text-align:left;padding:12px 4px 12px 14px}
+.vi-top{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.vi-w{font:600 18px/1.2 var(--font)}
+.vi-g{font-size:14px}
+.tag{font-size:10.5px;font-weight:600;color:var(--u-muted);border:1px solid var(--u-line);border-radius:6px;padding:1px 5px}
+.vi-s{margin:6px 0 0;font:italic 14px/1.45 var(--font);color:var(--u-muted)}
+.vi-s b{font-style:normal;color:var(--u-fg)}
+.vi-m{font-size:11.5px;color:var(--u-muted);margin-top:6px}
+.view .vi-del{margin:6px 6px 0 0;color:var(--u-muted)}
+.empty{color:var(--faint);font-size:14px;text-align:center;padding:24px 8px;line-height:1.6;list-style:none;margin:0}
+.view .empty{color:var(--u-muted)}
+
+.grp{margin-top:22px}
+.screen.wide .grp{max-width:620px}
+.grp-h{font-size:12.5px;font-weight:600;color:var(--u-muted);letter-spacing:.04em;margin:0 0 6px 14px}
+.grp ul{list-style:none;margin:0;padding:0;background:var(--u-card);border-radius:12px;box-shadow:0 0 0 1px var(--u-line);overflow:hidden}
+.grp li{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0 14px;min-height:46px;font-size:15px}
+.grp li + li{border-top:1px solid var(--u-line)}
+.grp li small{font-size:13.5px;color:var(--u-muted);text-align:right}
+.grp li button{border:0;background:none;padding:12px 0;font-size:15px;color:var(--u-accent);text-align:left;flex:1}
+.grp .tog{flex:1;padding:10px 0}
+.view .tog i{background:var(--u-line)}
+.view .tog input:checked + i{background:var(--u-accent)}
+.v-note{font-size:12px;color:var(--u-muted);text-align:center;margin-top:22px}
+
+.tabs{position:absolute;left:0;right:0;bottom:0;z-index:5;display:flex;justify-content:space-around;padding:7px 10px calc(var(--ib) + 4px);background:var(--u-bar);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);border-top:1px solid var(--u-line);font-family:var(--ui)}
+.tabs button{border:0;background:none;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:10.5px;font-weight:500;color:var(--u-muted);min-width:72px;padding:2px 0}
+.tabs button.on{color:var(--u-accent)}
+.tabs svg{width:24px;height:24px}
+
+/* ---------- reader ---------- */
+.reader{position:absolute;inset:0;z-index:10;background:var(--bg);color:var(--ink);overflow:hidden}
+.rbody{position:absolute;inset:0;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;touch-action:manipulation;overscroll-behavior:contain}
+.rbody::-webkit-scrollbar{display:none}
+.flow{
+  font-family:var(--font);font-size:var(--fs);line-height:var(--lh);letter-spacing:var(--ls);font-weight:var(--fw);text-align:var(--ta);
+  hyphens:auto;-webkit-hyphens:auto;font-kerning:normal;
+  max-width:calc(34em + 2 * var(--mg));margin:0 auto;padding:calc(var(--it) + 34px) var(--mg) calc(var(--ib) + 84px);
+  -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent;
+}
+.flow p{margin:0 0 var(--ps);text-indent:1.4em;widows:2;orphans:2}
+.flow .chap + p{text-indent:0}
+.chap{text-align:center;margin:0 0 2.4em;break-after:avoid}
+.chap-k{font:600 .6em/1 var(--ui);letter-spacing:.24em;color:var(--ink2);text-transform:uppercase}
+.chap-t{font-size:2em;font-weight:400;line-height:1.1;margin:.5em 0 0;text-wrap:balance}
+.chap-t::after{content:"";display:block;width:1.6em;height:1px;background:var(--ink2);opacity:.5;margin:.6em auto 0}
+.chap-end{text-align:center;text-indent:0;color:var(--faint);font:500 13px/1.6 var(--ui);letter-spacing:0;margin:3em 0 0}
+.w{border-radius:.2em;cursor:pointer;transition:background-color .15s}
+.w.on{background:var(--hl);box-shadow:0 0 0 .1em var(--hl)}
+.s.sel{background:var(--shl);box-shadow:0 0 0 .12em var(--shl);-webkit-box-decoration-break:clone;box-decoration-break:clone;border-radius:.15em}
+.flash{animation:flash 1.9s ease-out;border-radius:.15em}
+@keyframes flash{0%,35%{background:var(--hl)}100%{background:transparent}}
+
+.reader.annot .flow{line-height:max(var(--lh),2.2)}
+.w.annot{position:relative}
+.w.annot::before{content:attr(data-gloss);position:absolute;left:50%;bottom:calc(100% - .3em);transform:translateX(-50%);font:500 calc(var(--fs) * .5)/1 var(--ui);letter-spacing:0;text-indent:0;color:var(--accent);white-space:nowrap;pointer-events:none}
+.reader:not(.annot) .w.annot::before{display:none}
+
+.reader[data-mode="page"] .rbody{top:calc(var(--it) + 34px);bottom:calc(var(--ib) + 38px);overflow:hidden;touch-action:none}
+.reader[data-mode="page"] .flow{max-width:none;margin:0;padding-top:0;padding-bottom:0;column-fill:auto;transition:transform .34s cubic-bezier(.22,.7,.2,1)}
+.reader[data-mode="page"] .chap{padding-top:1.4em}
+.runhead{display:none;position:absolute;top:calc(var(--it) + 10px);left:0;right:0;text-align:center;font:600 10.5px/1 var(--ui);letter-spacing:.14em;text-transform:uppercase;color:var(--faint);pointer-events:none}
+.reader[data-mode="page"] .runhead{display:block}
+.rfoot{position:absolute;left:0;right:0;bottom:calc(var(--ib) + 12px);text-align:center;font:500 11.5px/1 var(--ui);color:var(--faint);font-variant-numeric:tabular-nums;pointer-events:none;transition:opacity .2s}
+.edge{display:none;position:absolute;top:calc(var(--it) + 34px);bottom:calc(var(--ib) + 38px);width:var(--edge,18px);z-index:6}
+.edge.l{left:0}.edge.r{right:0}
+.reader[data-mode="page"] .edge{display:block}
+
+.rtop{position:absolute;top:0;left:0;right:0;z-index:20;display:flex;align-items:center;gap:2px;padding:calc(var(--it) + 2px) 8px 6px;background:var(--chrome);-webkit-backdrop-filter:saturate(1.4) blur(18px);backdrop-filter:saturate(1.4) blur(18px);border-bottom:1px solid var(--rule);transform:translateY(-105%);transition:transform .26s cubic-bezier(.2,.8,.2,1);font-family:var(--ui)}
+.rtitle{flex:1;min-width:0;text-align:center;font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 6px}
+.rbot{position:absolute;left:0;right:0;bottom:0;z-index:20;padding:12px 22px calc(var(--ib) + 10px);background:var(--chrome);-webkit-backdrop-filter:saturate(1.4) blur(18px);backdrop-filter:saturate(1.4) blur(18px);border-top:1px solid var(--rule);transform:translateY(105%);transition:transform .26s cubic-bezier(.2,.8,.2,1);font-family:var(--ui)}
+.screen.wide .rbot{padding-left:max(22px,calc(50% - 300px));padding-right:max(22px,calc(50% - 300px))}
+.rbot-l{text-align:center;font-size:12.5px;color:var(--ink2);margin-top:6px;font-variant-numeric:tabular-nums}
+.reader.chrome .rtop,.reader.chrome .rbot{transform:none}
+.reader.chrome .rfoot{opacity:0}
+input[type="range"]{width:100%;accent-color:var(--accent);margin:0}
+
+.ib{flex:none;width:40px;height:40px;display:grid;place-items:center;border:0;background:none;border-radius:10px;color:var(--ink);padding:0}
+.ib:active{background:var(--rule)}
+.ib.sm{width:34px;height:34px}
+.ib.sm svg{width:19px;height:19px}
+.ib.aa{font:600 17px/1 Georgia,serif;letter-spacing:-.02em}
+#bMark.on{color:var(--accent)}
+#bMark.on svg,.star.on svg{fill:currentColor}
+.star.on{color:var(--accent)}
+
+.backpill{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(var(--ib) + 34px);z-index:25;display:flex;align-items:center;gap:6px;border:1px solid var(--rule);background:var(--surface);color:var(--ink);font:500 13.5px var(--ui);padding:8px 14px 8px 11px;border-radius:20px;box-shadow:0 8px 24px -10px var(--shadow);white-space:nowrap}
+.backpill svg{width:17px;height:17px}
+
+/* ---------- overlays ---------- */
+.ov{position:absolute;inset:0;z-index:40;pointer-events:none}
+.tip{position:absolute;max-width:min(300px,calc(100% - 24px));background:var(--surface);color:var(--ink);font:500 var(--bfs)/1.45 var(--ui);padding:6px 12px 7px;border-radius:10px;box-shadow:0 0 0 1px var(--rule),0 10px 28px -8px var(--shadow);pointer-events:auto;cursor:pointer;animation:pop .14s ease-out;letter-spacing:.01em}
+.tip .miss{color:var(--ink2)}
+.arrow{position:absolute;left:calc(var(--ax) - 7px);width:14px;height:14px;background:var(--surface);transform:rotate(45deg);border-radius:2px;pointer-events:none}
+[data-side="above"] > .arrow{bottom:-6px;box-shadow:1px 1px 0 var(--rule)}
+[data-side="below"] > .arrow{top:-6px;box-shadow:-1px -1px 0 var(--rule)}
+[data-side="none"] > .arrow{display:none}
+.tip > .arrow{width:12px;height:12px;left:calc(var(--ax) - 6px)}
+.tip[data-side="above"] > .arrow{bottom:-5px}
+.tip[data-side="below"] > .arrow{top:-5px}
+@keyframes pop{from{opacity:0;transform:translateY(3px) scale(.97)}to{opacity:1;transform:none}}
+
+.card,.scard{position:absolute;width:min(340px,calc(100% - 24px));background:var(--surface);color:var(--ink);border-radius:14px;box-shadow:0 0 0 1px var(--rule),0 18px 44px -14px var(--shadow);pointer-events:auto;display:flex;flex-direction:column;font-family:var(--ui);animation:pop .16s ease-out}
+.screen.wide .card,.screen.wide .scard{width:380px}
+.cd-body{overflow-y:auto;padding:12px 12px 14px 16px;border-radius:inherit;overscroll-behavior:contain;min-height:0}
+.cd-head{display:flex;align-items:center;gap:2px}
+.cd-w{flex:1;min-width:0;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.cd-word{font:600 21px/1.2 var(--font)}
+.cd-ph{font-size:13.5px;color:var(--ink2)}
+.cd-lem{font-size:12.5px;color:var(--ink2);margin-top:2px}
+.cd-lem b{color:var(--ink);font-weight:600}
+.cd-sec{border-top:1px solid var(--rule);margin-top:10px;padding-top:9px}
+.cd-lab{font-size:11px;font-weight:600;letter-spacing:.08em;color:var(--faint);margin-bottom:5px}
+.cd-row{display:flex;gap:8px;font-size:15px;line-height:1.5;padding:1px 0}
+.pos{flex:none;font:italic 500 12.5px/1.9 Georgia,serif;color:var(--accent);min-width:2.6em}
+.pos.zh{font:500 11.5px/2 var(--ui)}
+.cd-en{margin:0;font:15px/1.45 var(--font)}
+.cd-ctx{margin:0;font:italic 14px/1.5 var(--font);color:var(--ink2)}
+.cd-ctx b{color:var(--ink);font-style:normal;font-weight:600}
+.cd-foot{margin-top:12px;font-size:11.5px;color:var(--faint);line-height:1.5}
+.cd-miss{margin:8px 0 0;font-size:14px;line-height:1.55;color:var(--ink2)}
+.lnk{border:0;background:none;color:var(--accent);padding:0;font-size:13px;margin-top:10px}
+
+.sc-tr{padding:12px 16px 4px;font-size:calc(var(--bfs) + 1px);line-height:1.6;min-height:3.2em}
+.sc-meta{display:flex;align-items:center;gap:6px;padding:6px 10px 10px 16px;flex-wrap:wrap}
+.sc-src{flex:1;font-size:11.5px;color:var(--faint);white-space:nowrap}
+.sc-btn{background:var(--chip);border:1px solid var(--rule);color:var(--ink2);font-size:12.5px;padding:5px 10px;border-radius:14px}
+.sk{display:block;height:12px;border-radius:6px;background:var(--rule);margin:7px 0;animation:shim .7s infinite alternate}
+.sk.short{width:60%}
+@keyframes shim{from{opacity:.45}to{opacity:1}}
+
+.toast{position:absolute;left:50%;bottom:calc(var(--ib) + 74px);z-index:50;transform:translate(-50%,8px);opacity:0;background:var(--tip-bg);color:var(--tip-ink);font:500 13.5px/1.4 var(--ui);padding:9px 16px;border-radius:20px;pointer-events:none;transition:opacity .2s,transform .2s;max-width:calc(100% - 40px);text-align:center;box-shadow:0 8px 24px -8px var(--shadow)}
+.toast.in{opacity:1;transform:translate(-50%,0)}
+
+/* sheets (bottom sheet on phones, popover on wide screens) */
+.scrim{position:absolute;inset:0;pointer-events:auto;background:transparent;transition:background .22s}
+.scrim.dim.in{background:rgba(0,0,0,.28)}
+.sheet{position:absolute;left:0;right:0;bottom:0;max-height:66%;display:flex;flex-direction:column;background:var(--sheet);color:var(--ink);border-radius:20px 20px 0 0;box-shadow:0 -12px 40px -14px var(--shadow);pointer-events:auto;transform:translateY(102%);transition:transform .3s cubic-bezier(.2,.8,.2,1);padding-bottom:var(--ib);font-family:var(--ui)}
+.sheet.in{transform:none}
+.sheet[data-kind="toc"],.sheet[data-kind="search"]{max-height:82%;height:82%}
+.sh-grip{width:36px;height:5px;border-radius:3px;background:var(--rule);margin:7px auto 0;flex:none}
+.sh-top{display:flex;align-items:center;gap:10px;padding:8px 10px 8px 16px;flex:none}
+.sh-top .seg{flex:1}
+.sh-body{overflow-y:auto;padding:4px 18px 20px;overscroll-behavior:contain;min-height:0;flex:1}
+.screen.wide .sheet{left:auto;right:14px;bottom:auto;top:calc(var(--it) + 58px);width:390px;height:auto;max-height:min(78%,780px);border-radius:16px;padding-bottom:0;transform:translateY(-6px) scale(.98);opacity:0;transition:transform .2s,opacity .2s}
+.screen.wide .sheet.in{transform:none;opacity:1}
+.screen.wide .sheet[data-side="left"]{right:auto;left:14px}
+.screen.wide .sh-grip{display:none}
+
+.seg{display:flex;background:var(--chip);border:1px solid var(--rule);border-radius:10px;padding:2px;gap:2px}
+.seg button{flex:1;border:0;background:none;padding:7px 6px;border-radius:8px;font-size:14px;color:var(--ink2);white-space:nowrap}
+.seg button.on{background:var(--bg);color:var(--ink);box-shadow:0 1px 3px var(--shadow);font-weight:600}
+.lab{font-size:12px;font-weight:600;letter-spacing:.06em;color:var(--ink2);margin:18px 0 8px}
+.sizerow{display:flex;align-items:center;gap:8px;margin-top:4px}
+.sizerow output{min-width:3.4em;text-align:right;font-size:13px;color:var(--ink2);font-variant-numeric:tabular-nums}
+.themes{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.th{border:0;background:none;display:flex;flex-direction:column;align-items:center;gap:6px;font-size:12px;color:var(--ink2);padding:0}
+.th-sw{width:50px;height:50px;border-radius:50%;background:var(--tb);color:var(--tf);display:grid;place-items:center;font:600 18px/1 Georgia,serif;box-shadow:inset 0 0 0 1px rgba(128,128,128,.4)}
+.th.on{color:var(--ink);font-weight:600}
+.th.on .th-sw{box-shadow:0 0 0 2px var(--sheet),0 0 0 4px var(--accent)}
+.fonts{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.fo{border:1px solid var(--rule);background:var(--chip);border-radius:10px;padding:8px 4px 7px;display:flex;flex-direction:column;align-items:center;gap:3px;min-width:0}
+.fo-a{font-size:23px;line-height:1.1;color:var(--ink)}
+.fo-n{font-size:11px;color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.fo-n small{display:block;font-size:10px;color:var(--faint);text-align:center}
+.fo.on{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.rg{display:grid;grid-template-columns:4.6em 1fr 3.6em;align-items:center;gap:10px;padding:6px 0;font-size:14px}
+.rg output{text-align:right;color:var(--ink2);font-variant-numeric:tabular-nums;font-size:13px}
+.tog{position:relative;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 0;cursor:pointer}
+.tog span{font-size:14px}
+.tog small{display:block;font-size:12px;color:var(--ink2);margin-top:2px;line-height:1.4}
+.tog input{position:absolute;opacity:0;pointer-events:none}
+.tog i{flex:none;width:44px;height:26px;border-radius:13px;background:var(--rule);position:relative;transition:background .2s}
+.tog i::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#FFFFFF;box-shadow:0 1px 3px rgba(0,0,0,.3);transition:transform .2s}
+.tog input:checked + i{background:var(--accent)}
+.tog input:checked + i::after{transform:translateX(18px)}
+.tog input:focus-visible + i{outline:2px solid var(--accent);outline-offset:2px}
+.tog2{display:grid;grid-template-columns:1fr 1fr;gap:0 22px}
+.reset{margin-top:18px;width:100%;border:1px solid var(--rule);background:var(--chip);border-radius:10px;padding:10px;font-size:14px;color:var(--ink2)}
+.dicts{list-style:none;margin:0;padding:0;border:1px solid var(--rule);border-radius:10px;overflow:hidden;background:var(--chip)}
+.dicts li{display:flex;align-items:center;gap:10px;padding:10px 12px;font-size:14px}
+.dicts li + li{border-top:1px solid var(--rule)}
+.dicts small{margin-left:auto;font-size:12px;color:var(--ink2)}
+.dicts .grip{color:var(--faint);font-size:15px;line-height:1}
+.dicts .off{color:var(--faint)}
+.note{font-size:12px;color:var(--faint);margin:8px 2px 0;line-height:1.5}
+
+.dm{margin-top:12px;display:flex;flex-direction:column;align-items:center;gap:9px;padding:16px 14px 14px;background:var(--bg);border:1px solid var(--rule);border-radius:12px}
+.dm-tip{position:relative;background:var(--surface);color:var(--ink);font:500 var(--bfs)/1.4 var(--ui);padding:5px 11px;border-radius:9px;max-width:100%;box-shadow:0 0 0 1px var(--rule),0 8px 20px -8px var(--shadow)}
+.dm-tip::after{content:"";position:absolute;left:50%;bottom:-4px;width:9px;height:9px;margin-left:-4.5px;background:inherit;transform:rotate(45deg);box-shadow:1px 1px 0 var(--rule)}
+.dm-card{align-self:stretch;background:var(--surface);border:1px solid var(--rule);border-radius:10px;padding:9px 12px;font-size:13.5px;line-height:1.5}
+.dm-card b{font:600 16px var(--font)}
+.dm-ph{color:var(--ink2);font-size:12.5px}
+.dm-row{display:flex;gap:6px}
+.dm-en{color:var(--ink2);font:13.5px/1.45 var(--font);margin-top:3px}
+.dm-s{margin:0;font:17px/1.4 var(--font);color:var(--ink)}
+.dm-w{background:var(--hl);border-radius:.2em;box-shadow:0 0 0 .1em var(--hl)}
+
+.toc,.marks,.sres{list-style:none;margin:0;padding:0}
+.toc button,.marks button,.sres button{width:100%;border:0;background:none;text-align:left;display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:11px 4px;border-bottom:1px solid var(--rule);color:var(--ink);font-size:15px}
+.toc span{font-family:var(--font)}
+.toc .cur{color:var(--accent);font-weight:600}
+.toc small,.marks small{color:var(--faint);font-size:12px;flex:none}
+.toc-book{display:flex;flex-direction:column;gap:2px;padding:4px 4px 12px;border-bottom:1px solid var(--rule)}
+.toc-book b{font:600 18px var(--font)}
+.toc-book span{font-size:13px;color:var(--ink2)}
+.marks button{flex-direction:column;align-items:flex-start;gap:4px}
+.marks span{font:italic 14.5px/1.45 var(--font)}
+.sres button{display:block;font:14.5px/1.5 var(--font);color:var(--ink2)}
+.sres mark{background:var(--hl);color:var(--ink);border-radius:3px;padding:0 1px}
+.s-count{font-size:12px;color:var(--faint);padding:2px 4px 6px}
+
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+</style>
+
+<header class="bar">
+  <div class="brand"><b>点词阅读器</b><span>交互原型 · 第 1 版</span></div>
+  <div class="devs" role="tablist" aria-label="设备尺寸">
+    <button data-dev="iphone">iPhone</button>
+    <button data-dev="android">安卓手机</button>
+    <button data-dev="ipad">iPad 竖屏</button>
+    <button data-dev="ipadl">iPad 横屏</button>
+    <button data-dev="fit">本机全屏</button>
+  </div>
+  <p class="hint"><b>点单词</b>查词 · <b>长按</b>整句翻译 · <b>点空白处</b>呼出工具栏 · 右上 <b>Aa</b> 调排版和释义</p>
+</header>
+
+<main class="stage" id="stage">
+  <div class="dwrap" id="dwrap">
+    <div class="device" id="device">
+      <div class="screen" id="screen" data-t="white" data-ui="light">
+
+        <div class="sbar" id="sbar"><span>9:41</span><span class="batt"><i></i></span></div>
+
+        <!-- 书架 -->
+        <section class="view" id="vShelf">
+          <div class="v-head">
+            <h1>书架</h1>
+            <div class="v-act">
+              <button class="ib" data-toast="书架搜索在 App 里实现" aria-label="搜索书架"><span data-ic="search"></span></button>
+              <button class="ib" data-toast="App 里可以从文件、其他 App 的「共享」或粘贴文本导入" aria-label="导入书籍"><span data-ic="plus"></span></button>
+            </div>
+          </div>
+          <button class="cont" data-book="pp">
+            <div class="cont-cv"><div class="cover cv-pp"><div class="cv"><div class="cv-t">Pride and Prejudice</div><div class="cv-a">Jane Austen</div></div></div></div>
+            <div class="cont-i">
+              <div class="k">继续阅读</div>
+              <div class="t">Pride and Prejudice</div>
+              <div class="a">Jane Austen</div>
+              <div class="pbar"><i id="contBar"></i></div>
+              <div class="m" id="contMeta">第 1 章 · 刚开始</div>
+            </div>
+          </button>
+          <div class="v-sub">全部书籍</div>
+          <div class="grid">
+            <button class="book" data-book="pp"><div class="cover cv-pp"><div class="cv"><div><div class="cv-t">Pride and Prejudice</div><div class="cv-rule"></div></div><div class="cv-a">Jane Austen</div></div></div><div class="bk-t">Pride and Prejudice</div><div class="bk-m">EPUB · 第 1 / 61 章</div></button>
+            <button class="book" data-book="fr"><div class="cover cv-fr"><div class="cv"><div><div class="cv-t">Frankenstein</div><div class="cv-rule"></div></div><div class="cv-a">Mary Shelley</div></div></div><div class="bk-t">Frankenstein</div><div class="bk-m">EPUB · 42%</div></button>
+            <button class="book" data-book="gg"><div class="cover cv-gg"><div class="cv"><div><div class="cv-t">The Great Gatsby</div><div class="cv-rule"></div></div><div class="cv-a">F. Scott Fitzgerald</div></div></div><div class="bk-t">The Great Gatsby</div><div class="bk-m">EPUB · 已读完</div></button>
+            <button class="book" data-book="ps"><div class="cover cv-ps"><div class="cv"><div><div class="cv-t">Psychology 2e</div><div class="cv-rule"></div></div><div class="cv-a">OpenStax</div></div></div><div class="bk-t">Psychology 2e</div><div class="bk-m">PDF 教材 · 8%</div></button>
+            <button class="book" data-book="al"><div class="cover cv-al"><div class="cv"><div><div class="cv-t">Alice’s Adventures in Wonderland</div><div class="cv-rule"></div></div><div class="cv-a">Lewis Carroll</div></div></div><div class="bk-t">Alice’s Adventures in Wonderland</div><div class="bk-m">TXT · 未开始</div></button>
+          </div>
+        </section>
+
+        <!-- 生词本 -->
+        <section class="view" id="vVocab" hidden>
+          <div class="v-head">
+            <h1>生词本</h1>
+            <div class="v-act"><button class="pill" data-toast="App 里会导出 CSV，可以直接导入 Anki">导出</button></div>
+          </div>
+          <div class="v-meta" id="vcount"></div>
+          <div class="sfield"><span data-ic="search"></span><input id="vq" type="search" placeholder="搜索单词或释义" autocomplete="off"></div>
+          <ul class="vlist" id="vlist"></ul>
+        </section>
+
+        <!-- 设置 -->
+        <section class="view" id="vPrefs" hidden>
+          <div class="v-head"><h1>设置</h1></div>
+          <div class="grp"><div class="grp-h">词典</div><ul>
+            <li><span>ECDICT 英汉词典</span><small>已下载 · 约 60 MB</small></li>
+            <li><span>Wiktionary 英英词典</span><small>已下载 · 约 45 MB</small></li>
+            <li><button data-toast="App 里从文件选择 .mdx（和配套的 .mdd）导入">导入 MDX 词典（牛津、朗文等）</button></li>
+          </ul></div>
+          <div class="grp"><div class="grp-h">翻译</div><ul>
+            <li><span>长按句子翻译</span><small>系统离线翻译</small></li>
+            <li><span>语言包</span><small>英语 → 中文 · 已下载</small></li>
+            <li><button data-toast="已清除（原型演示）">清除翻译缓存</button><small>1.2 MB</small></li>
+          </ul></div>
+          <div class="grp"><div class="grp-h">阅读</div><ul>
+            <li><span>默认释义档位</span><small id="prefTier">极简</small></li>
+            <li><label class="tog"><span>打开 App 时回到上次的书</span><input type="checkbox" id="prefResume" checked><i></i></label></li>
+          </ul></div>
+          <div class="grp"><div class="grp-h">数据</div><ul>
+            <li><button data-toast="App 里会把书架、生词本和进度导出成一个备份文件">备份与恢复</button></li>
+            <li><span>多设备同步</span><small>未开启</small></li>
+          </ul></div>
+          <div class="grp"><div class="grp-h">关于</div><ul>
+            <li><button data-toast="ECDICT（MIT）· Wiktionary（CC BY-SA）· 字体（SIL OFL）">开源协议与致谢</button></li>
+          </ul></div>
+          <p class="v-note">原型：这一页只展示布局，数字为示意。</p>
+        </section>
+
+        <nav class="tabs" id="tabs">
+          <button data-view="shelf" class="on"><span data-ic="books"></span>书架</button>
+          <button data-view="vocab"><span data-ic="vocab"></span>生词本</button>
+          <button data-view="prefs"><span data-ic="prefs"></span>设置</button>
+        </nav>
+
+        <!-- 阅读页 -->
+        <section class="reader" id="vReader" hidden>
+          <div class="runhead">Pride and Prejudice · Chapter 1</div>
+          <div class="rbody" id="rbody"><article class="flow" id="flow" lang="en"></article></div>
+          <div class="edge l" id="edgeL" aria-hidden="true"></div>
+          <div class="edge r" id="edgeR" aria-hidden="true"></div>
+          <div class="rfoot" id="rfoot"></div>
+          <button class="backpill" id="backPill" hidden><span data-ic="ret"></span>返回刚才的位置</button>
+          <header class="rtop">
+            <button class="ib" id="bBack" aria-label="返回书架"><span data-ic="back"></span></button>
+            <div class="rtitle">Pride and Prejudice</div>
+            <button class="ib" id="bToc" aria-label="目录与书签"><span data-ic="toc"></span></button>
+            <button class="ib" id="bSearch" aria-label="书内搜索"><span data-ic="search"></span></button>
+            <button class="ib" id="bMark" aria-label="书签"><span data-ic="mark"></span></button>
+            <button class="ib aa" id="bAa" aria-label="排版与释义设置">Aa</button>
+          </header>
+          <footer class="rbot">
+            <input type="range" id="prog" min="0" max="1000" value="0" aria-label="阅读进度">
+            <div class="rbot-l" id="progL"></div>
+          </footer>
+        </section>
+
+        <div class="ov" id="ov"></div>
+        <div class="toast" id="toast" hidden></div>
+        <div class="island"></div>
+        <div class="homebar"></div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+(function(){
+'use strict';
+const $=(s,r=document)=>r.querySelector(s), $$=(s,r=document)=>Array.from(r.querySelectorAll(s));
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const escRe=s=>s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const store={
+  get(k,d){try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(e){return d}},
+  set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+};
+
+/* ---------- 示例词典（格式模仿 ECDICT：音标 | 词性+释义，词性之间用 " / " 分隔 | 英英释义） ---------- */
+const DICT={
+a:"ə|art. 一（个）；某一|used before a singular noun to mean one or any",
+an:"ən|art. 一（个）（用于元音前）|form of 'a' used before a vowel sound",
+the:"ðə|art. 这；那；（表特指）|used before a noun to show which one you mean",
+it:"ɪt|pron. 它；这；那|used for a thing, situation or idea already mentioned",
+its:"ɪts|pron. 它的|belonging to it",
+be:"biː|v. 是；存在；在 / aux. （构成进行时、被动语态）|to exist; used to link a subject and a description",
+have:"hæv|v. 有；拥有；经历 / aux. （构成完成时）|to own or hold; used to form perfect tenses",
+do:"duː|v. 做；干 / aux. （构成疑问句、否定句）|to perform an action; used to form questions and negatives",
+truth:"truːθ|n. 真理；事实；真相|a fact or principle that is accepted as true",
+universally:"ˌjuːnɪˈvɜːsəli|adv. 普遍地；人人都|by everyone or in every case",
+acknowledge:"əkˈnɒlɪdʒ|v. 承认；公认；致谢|to accept or admit that something is true",
+that:"ðæt|pron. 那；那个 / adj. 那个 / conj. （引导从句）|the thing mentioned; used to introduce a clause",
+single:"ˈsɪŋɡl|adj. 单身的；单一的；单个的|not married; only one",
+man:"mæn|n. 男人；人|an adult male human",
+in:"ɪn|prep. 在…里；处于…状态；用|inside; in a particular state",
+possession:"pəˈzeʃn|n. 拥有；占有；财产|the state of having or owning something",
+of:"ɒv|prep. …的；属于；关于|belonging to; relating to",
+good:"ɡʊd|adj. 好的；可观的；善良的|of high quality; large in amount",
+fortune:"ˈfɔːtʃuːn|n. 财富；运气；命运|a large amount of money; chance or luck",
+must:"mʌst|aux. 必须；一定（表推测）|used to say something is necessary or very likely",
+want:"wɒnt|v. 想要；需要 / n. 需要；缺乏|to wish for; (n.) a lack of something needed",
+wife:"waɪf|n. 妻子；太太|the woman a man is married to",
+however:"haʊˈevə|adv. 无论多么；然而|to whatever degree; but",
+little:"ˈlɪtl|adj. 很少的；小的 / adv. 几乎不|small in size or amount; not much",
+know:"nəʊ|v. 知道；认识；了解|to have information in your mind",
+known:"nəʊn|adj. 已知的；知名的|familiar to people",
+feeling:"ˈfiːlɪŋ|n. 感情；感觉；看法|an emotion; an opinion or attitude",
+or:"ɔː|conj. 或者；否则|used to link alternatives",
+view:"vjuː|n. 观点；看法；景色 / v. 看待|an opinion or way of thinking about something",
+such:"sʌtʃ|adj. 这样的；如此的 / pron. 这样的人（或事）|of the type already mentioned",
+may:"meɪ|aux. 可能；可以|used to say that something is possible",
+his:"hɪz|pron. 他的|belonging to him",
+first:"fɜːst|adj. 第一的；最初的 / adv. 首先|coming before all others",
+enter:"ˈentə|v. 进入；加入|to come or go into a place",
+neighbourhood:"ˈneɪbəhʊd|n. 街坊；邻近地区；四邻|a district, or the people who live there",
+this:"ðɪs|pron. 这；这个 / adj. 这个|the one near or just mentioned",
+so:"səʊ|adv. 如此；这么；非常 / conj. 所以|to such a great degree; therefore",
+well:"wel|adv. 好；充分地；牢固地 / int. 嗯；好吧|in a good or thorough way",
+fix:"fɪks|v. 固定；确定；修理|to fasten firmly; to decide definitely",
+mind:"maɪnd|n. 头脑；心思；想法 / v. 介意|the part of a person that thinks and feels",
+surrounding:"səˈraʊndɪŋ|adj. 周围的；附近的|near or around a place",
+family:"ˈfæməli|n. 家庭；家人；家族|a group of people related to each other",
+he:"hiː|pron. 他|used for a man or boy already mentioned",
+consider:"kənˈsɪdə|v. 认为；考虑；体谅|to think about carefully; to regard as",
+rightful:"ˈraɪtfl|adj. 合法的；正当的；理所应得的|morally or legally correct",
+property:"ˈprɒpəti|n. 财产；所有物；特性|a thing or things that belong to someone",
+some:"sʌm|adj. 某个；一些 / pron. 一些|an unknown one; an amount of",
+one:"wʌn|num. 一 / pron. 一个人；某人|the number 1; a single person or thing",
+other:"ˈʌðə|adj. 其他的；另外的 / pron. 另一个|different from the one mentioned",
+their:"ðeə|pron. 他们的；她们的|belonging to them",
+daughter:"ˈdɔːtə|n. 女儿|a person's female child",
+my:"maɪ|pron. 我的|belonging to me",
+dear:"dɪə|adj. 亲爱的 / n. 亲爱的人|loved; used when speaking to someone you love",
+mr:"ˈmɪstə|abbr. 先生（Mister 的缩写）|a title used before a man's surname",
+mrs:"ˈmɪsɪz|abbr. 太太；夫人|a title used before a married woman's surname",
+bennet:"ˈbenɪt|name. 班纳特（姓氏）|surname of the family in the novel",
+say:"seɪ|v. 说；讲|to speak words",
+lady:"ˈleɪdi|n. 女士；夫人；妻子|a woman; (old use) a man's wife; a title for a noblewoman",
+to:"tuː|prep. 向；到；对 / part. （不定式标记）|in the direction of; used before a verb",
+him:"hɪm|pron. 他（宾格）|object form of 'he'",
+day:"deɪ|n. 天；日子；白天|a period of 24 hours",
+you:"juː|pron. 你；你们|the person or people being spoken to",
+your:"jɔː|pron. 你的；你们的|belonging to you",
+hear:"hɪə|v. 听见；听说|to be aware of sounds; to be told about",
+netherfield:"ˈneðəfiːld|name. 内瑟菲尔德（庄园名）|name of a large country house in the novel",
+park:"pɑːk|n. 庄园；公园|land around a large country house; a public garden",
+let:"let|v. 出租；让；允许|to allow; (British) to rent out a property",
+at:"æt|prep. 在（某时某处）|used to show a place or time",
+last:"lɑːst|adj. 最后的；上一个 / adv. 最后|coming after all others; at last: finally",
+reply:"rɪˈplaɪ|v. 回答；答复 / n. 回复|to say something in answer",
+not:"nɒt|adv. 不；没有|used to make a word or sentence negative",
+but:"bʌt|conj. 但是；而是|used to introduce a contrast",
+return:"rɪˈtɜːn|v. 回答；返回；归还|(literary) to reply; to come or go back",
+she:"ʃiː|pron. 她|used for a woman or girl already mentioned",
+for:"fɔː|prep. 为了；对于 / conj. 因为|intended for; (literary) because",
+long:"lɒŋ|adj. 长的；长久的 / name. 朗（姓氏）|measuring a great length; here the surname Long",
+just:"dʒʌst|adv. 刚刚；仅仅；正好|very recently; only",
+here:"hɪə|adv. 这里；在这儿|in or at this place",
+and:"ænd|conj. 和；并且|used to join words or clauses",
+tell:"tel|v. 告诉；讲述|to give information to someone",
+me:"miː|pron. 我（宾格）|object form of 'I'",
+all:"ɔːl|adj. 所有的 / pron. 全部|the whole number or amount",
+about:"əˈbaʊt|prep. 关于 / adv. 大约|on the subject of; approximately",
+make:"meɪk|v. 做；使；制造|to create; to cause to be",
+no:"nəʊ|adj. 没有的 / adv. 不|not any",
+answer:"ˈɑːnsə|n. 回答；答案 / v. 回答|something said in reply",
+who:"huː|pron. 谁|what or which person",
+take:"teɪk|v. 拿；租下；带走；接受|to get hold of; to rent a house",
+cry:"kraɪ|v. 喊叫；哭 / n. 叫喊|to shout loudly; to produce tears",
+impatiently:"ɪmˈpeɪʃntli|adv. 不耐烦地；急切地|in an irritated, eager way",
+i:"aɪ|pron. 我|used by a speaker to refer to themselves",
+objection:"əbˈdʒekʃn|n. 反对；异议|a reason for disagreeing",
+invitation:"ˌɪnvɪˈteɪʃn|n. 邀请；诱因|a request to come; something that encourages an action",
+enough:"ɪˈnʌf|adj. 足够的 / adv. 足够地|as much as is needed",
+why:"waɪ|adv. 为什么 / int. 哎呀；嗨|for what reason; (old use) used to show surprise",
+young:"jʌŋ|adj. 年轻的；幼小的|having lived for a short time",
+large:"lɑːdʒ|adj. 大的；大量的|big in size or amount",
+from:"frɒm|prep. 从；来自|showing where someone comes from",
+north:"nɔːθ|n. 北方；北部 / adj. 北方的|the direction on your left when you face the sunrise",
+england:"ˈɪŋɡlənd|name. 英格兰|the largest country of the United Kingdom",
+come:"kʌm|v. 来；到达|to move towards the speaker",
+down:"daʊn|adv. 向下；（从城里）来到乡下|towards a lower position; away from a big city",
+on:"ɒn|prep. 在…上；在（某天）|touching a surface; used with days",
+monday:"ˈmʌndeɪ|n. 星期一|the day of the week after Sunday",
+chaise:"ʃeɪz|n. 轻便马车|a light horse-drawn carriage; a chaise and four is pulled by four horses",
+four:"fɔː|num. 四|the number 4",
+see:"siː|v. 看见；看望；明白|to notice with your eyes; to visit",
+place:"pleɪs|n. 地方；住所；位置|a particular area or house",
+much:"mʌtʃ|adv. 非常；很 / adj. 许多的|to a great degree; a lot of",
+delighted:"dɪˈlaɪtɪd|adj. 高兴的；满意的|very pleased",
+with:"wɪð|prep. 和；对于；带有|in the company of; concerning",
+agree:"əˈɡriː|v. 同意；谈妥|to have the same opinion; to settle terms",
+morris:"ˈmɒrɪs|name. 莫里斯（姓氏）|a surname",
+immediately:"ɪˈmiːdiətli|adv. 立即；马上|at once, without delay",
+before:"bɪˈfɔː|prep. 在…之前 / conj. 在…之前|earlier than",
+michaelmas:"ˈmɪklməs|n. 米迦勒节（9月29日）|the feast of St Michael on 29 September, a traditional date for renting property",
+servant:"ˈsɜːvənt|n. 仆人；佣人|a person employed to work in someone's house",
+house:"haʊs|n. 房子；住宅|a building for people to live in",
+by:"baɪ|prep. 被；在…之前；通过|used to show who does something; not later than",
+end:"end|n. 结束；末尾 / v. 结束|the final part of a period",
+next:"nekst|adj. 下一个的；紧接的|coming immediately after",
+week:"wiːk|n. 星期；周|a period of seven days",
+what:"wɒt|pron. 什么 / adj. 多么|asking for information; used to show surprise",
+name:"neɪm|n. 名字；名称|the word someone is called by",
+bingley:"ˈbɪŋli|name. 宾利（姓氏）|surname of the rich young man in the novel",
+married:"ˈmærid|adj. 已婚的；婚姻的|having a husband or wife",
+marry:"ˈmæri|v. 结婚；嫁；娶|to become husband and wife",
+oh:"əʊ|int. 哦；啊|used to express surprise or emotion",
+sure:"ʃʊə|adj. 确信的；肯定的|certain; to be sure: certainly",
+five:"faɪv|num. 五|the number 5",
+thousand:"ˈθaʊznd|num. 千|the number 1,000; here, pounds a year",
+year:"jɪə|n. 年；年度；岁|a period of twelve months; a year: per year",
+fine:"faɪn|adj. 好的；美好的；精细的|very good; excellent",
+thing:"θɪŋ|n. 事情；东西|an object, event or situation",
+our:"ˈaʊə|pron. 我们的|belonging to us",
+girl:"ɡɜːl|n. 女孩；姑娘；女儿|a young woman; a daughter",
+how:"haʊ|adv. 怎样；如何；多么|in what way; to what degree",
+can:"kæn|aux. 能；可以|to be able to",
+affect:"əˈfekt|v. 影响；感动|to have an influence on",
+them:"ðem|pron. 他们；她们（宾格）|object form of 'they'",
+tiresome:"ˈtaɪəsəm|adj. 令人厌烦的；讨厌的|making you feel annoyed or bored",
+think:"θɪŋk|v. 想；认为；考虑|to have ideas in your mind",
+design:"dɪˈzaɪn|n. 意图；计划；设计 / v. 设计|(old use) a plan or intention; a drawing",
+settle:"ˈsetl|v. 定居；解决；安顿|to go and live in a new place",
+nonsense:"ˈnɒnsns|n. 胡说；废话 / int. 胡说|ideas or words that are foolish or untrue",
+talk:"tɔːk|v. 说话；谈论 / n. 谈话|to say things; to speak",
+very:"ˈveri|adv. 非常；很|to a great degree",
+likely:"ˈlaɪkli|adj. 可能的 / adv. 很可能|probable; expected to happen",
+fall:"fɔːl|v. 落下；陷入 / n. 秋天|to drop; fall in love: begin to love",
+love:"lʌv|n. 爱；爱情 / v. 爱；喜欢|a strong feeling of affection",
+therefore:"ˈðeəfɔː|adv. 因此；所以|for that reason",
+visit:"ˈvɪzɪt|v. 拜访；参观 / n. 访问|to go and see a person or place",
+as:"æz|conj. 当…时；因为；像 / adv. 同样地|while; because; to the same degree",
+soon:"suːn|adv. 很快；不久|in a short time; as soon as: immediately when",
+occasion:"əˈkeɪʒn|n. 理由；场合；时机|a reason or need; a particular time",
+go:"ɡəʊ|v. 去；走|to move or travel to a place",
+send:"send|v. 送；派遣；寄|to cause to go somewhere",
+themselves:"ðəmˈselvz|pron. 他们自己；她们自己|by themselves: alone, without help",
+which:"wɪtʃ|pron. 哪个；（关系代词）那|used to refer to something already mentioned",
+perhaps:"pəˈhæps|adv. 也许；或许|possibly",
+will:"wɪl|aux. 将；会；愿意|used to talk about the future",
+still:"stɪl|adv. 仍然；更加 / adj. 静止的|even (with comparatives); continuing",
+better:"ˈbetə|adj. 更好的 / adv. 更好地|of a higher standard; comparative of 'good'",
+handsome:"ˈhænsəm|adj. 漂亮的；英俊的；可观的|good-looking (in old use, also of women)",
+any:"ˈeni|pron. 任何一个 / adj. 任何的|one or some, no matter which",
+like:"laɪk|v. 喜欢 / prep. 像|to find pleasant; similar to",
+best:"best|adj. 最好的 / adv. 最|of the highest quality; most",
+party:"ˈpɑːti|n. 一行人；聚会；政党|a group of people doing something together",
+flatter:"ˈflætə|v. 奉承；讨好；使显得更好|to praise too much or insincerely",
+certainly:"ˈsɜːtnli|adv. 当然；无疑|without any doubt",
+share:"ʃeə|n. 一份；份额 / v. 分享|a part of something; had my share: had a fair amount",
+beauty:"ˈbjuːti|n. 美丽；美貌；美人|the quality of being attractive",
+pretend:"prɪˈtend|v. 假装；自称|to behave as if something is true; to claim",
+anything:"ˈeniθɪŋ|pron. 任何事物|a thing of any kind",
+extraordinary:"ɪkˈstrɔːdnri|adj. 非凡的；特别的|very unusual or remarkable",
+now:"naʊ|adv. 现在；如今|at the present time",
+when:"wen|conj. 当…时 / adv. 什么时候|at the time that",
+woman:"ˈwʊmən|n. 女人；妇女|an adult female human",
+"grown-up":"ˈɡrəʊn ʌp|adj. 成年的 / n. 成年人|adult; fully grown",
+ought:"ɔːt|aux. 应该；应当|used to say what is right or sensible",
+give:"ɡɪv|v. 给；给予；（give over）停止|to hand to someone; give over: (old use) stop",
+over:"ˈəʊvə|prep. 在…之上 / adv. 结束|above; finished",
+her:"hɜː|pron. 她的；她（宾格）|belonging to her; object form of 'she'",
+own:"əʊn|adj. 自己的 / v. 拥有|belonging to oneself",
+case:"keɪs|n. 情况；案例；箱子|a particular situation",
+often:"ˈɒfn|adv. 经常；常常|many times",
+indeed:"ɪnˈdiːd|adv. 确实；真正地|really, certainly (used for emphasis)",
+into:"ˈɪntuː|prep. 进入；到…里面|to the inside of",
+more:"mɔː|adj. 更多的 / adv. 更；更多|a larger amount",
+than:"ðæn|conj. 比|used in comparisons",
+engage:"ɪnˈɡeɪdʒ|v. 保证；承诺；雇用；参与|(old use) to promise; to take part",
+assure:"əˈʃʊə|v. 向…保证；使确信|to tell someone firmly that something is true",
+only:"ˈəʊnli|adv. 只；仅仅 / adj. 唯一的|no more than; just",
+establishment:"ɪˈstæblɪʃmənt|n. 机构；建立；（旧）好归宿|(old use) a good marriage and home; an organization",
+would:"wʊd|aux. 将会；会|used to talk about imagined situations",
+sir:"sɜː|n. 爵士；先生|a title for a knight; a polite way to address a man",
+william:"ˈwɪljəm|name. 威廉|a male first name",
+lucas:"ˈluːkəs|name. 卢卡斯（姓氏）|a surname",
+determined:"dɪˈtɜːmɪnd|adj. 坚决的；下定决心的|having firmly decided to do something",
+merely:"ˈmɪəli|adv. 仅仅；只不过|only; simply",
+account:"əˈkaʊnt|n. 缘故；账户；描述|on that account: for that reason",
+general:"ˈdʒenrəl|adj. 一般的；普遍的 / n. 将军|in general: usually",
+newcomer:"ˈnjuːkʌmə|n. 新来的人；新手|a person who has recently arrived",
+impossible:"ɪmˈpɒsəbl|adj. 不可能的|not able to happen or be done",
+us:"ʌs|pron. 我们（宾格）|object form of 'we'",
+if:"ɪf|conj. 如果；是否|on condition that",
+"over-scrupulous":"ˌəʊvə ˈskruːpjələs|adj. 过分拘礼的；顾虑过多的|too careful about doing things correctly",
+surely:"ˈʃʊəli|adv. 当然；想必；无疑|used to show you are sure, or surprised",
+dare:"deə|v. 敢；胆敢|I dare say: I think it probable",
+glad:"ɡlæd|adj. 高兴的；乐意的|pleased and happy",
+few:"fjuː|adj. 很少的；几个 / pron. 少数|a small number of",
+line:"laɪn|n. 线；（书信的）几行字|a row of words; a few lines: a short letter",
+hearty:"ˈhɑːti|adj. 衷心的；热情的；丰盛的|sincere and enthusiastic",
+consent:"kənˈsent|n. 同意；许可 / v. 同意|permission or agreement",
+whichever:"wɪtʃˈevə|pron. 无论哪个；任何一个|any one of a group",
+choose:"tʃuːz|v. 选择；挑选|to decide which one you want",
+though:"ðəʊ|conj. 虽然；不过|despite the fact that; however",
+throw:"θrəʊ|v. 扔；投；（throw in）附带加上|to send through the air; throw in: add",
+word:"wɜːd|n. 单词；话；消息|a unit of language; a good word: praise",
+lizzy:"ˈlɪzi|name. 丽萃（伊丽莎白的昵称）|pet name for Elizabeth, the second daughter",
+desire:"dɪˈzaɪə|v. 希望；渴望 / n. 欲望|to want strongly; (old use) to request",
+bit:"bɪt|n. 一点；小块|a small amount; not a bit: not at all",
+half:"hɑːf|n. 一半 / adv. 一半地|one of two equal parts; not half so: not nearly as",
+jane:"dʒeɪn|name. 简（大女儿）|the eldest daughter",
+nor:"nɔː|conj. 也不|and not; neither",
+"good-humoured":"ˌɡʊd ˈhjuːməd|adj. 脾气好的；和蔼的|cheerful and friendly",
+lydia:"ˈlɪdiə|name. 莉迪亚（小女儿）|the youngest daughter",
+always:"ˈɔːlweɪz|adv. 总是；一直|at all times",
+preference:"ˈprefrəns|n. 偏爱；优先|a greater liking for one than another",
+they:"ðeɪ|pron. 他们；她们；它们|people or things already mentioned",
+none:"nʌn|pron. 没有一个；毫无|not one; not any",
+recommend:"ˌrekəˈmend|v. 推荐；使受欢迎|to suggest as good; to make attractive",
+silly:"ˈsɪli|adj. 愚蠢的；傻的|showing little thought or judgment",
+ignorant:"ˈɪɡnərənt|adj. 无知的；愚昧的|lacking knowledge or information",
+something:"ˈsʌmθɪŋ|pron. 某事；某物；某种程度|a thing not named; to some degree",
+quickness:"ˈkwɪknəs|n. 敏捷；机敏；快速|the quality of thinking or learning fast",
+sister:"ˈsɪstə|n. 姐妹|a girl or woman with the same parents as you",
+abuse:"əˈbjuːz|v. 辱骂；虐待；滥用 / n. 滥用|to speak rudely or cruelly to",
+child:"tʃaɪld|n. 孩子；子女|a young person; a son or daughter",
+way:"weɪ|n. 方式；方法；道路|a method or manner",
+delight:"dɪˈlaɪt|n. 高兴；乐事 / v. 使高兴|great pleasure; take delight in: enjoy",
+vex:"veks|v. 使烦恼；使恼火|to annoy or worry someone",
+compassion:"kəmˈpæʃn|n. 同情；怜悯|sympathy for the suffering of others",
+poor:"pɔː|adj. 可怜的；贫穷的；差的|deserving pity; having little money",
+nerve:"nɜːv|n. 神经；（复数）神经紧张；勇气|nerves: a feeling of anxiety; a fibre that carries messages",
+mistake:"mɪˈsteɪk|v. 误解；弄错 / n. 错误|to understand wrongly",
+high:"haɪ|adj. 高的；高度的|great in amount or degree",
+respect:"rɪˈspekt|n. 尊重；敬意 / v. 尊重|a feeling of admiration or regard",
+old:"əʊld|adj. 老的；旧的；相识已久的|having lived long; known for a long time",
+friend:"frend|n. 朋友|a person you know well and like",
+mention:"ˈmenʃn|v. 提到；说起 / n. 提及|to speak about briefly",
+consideration:"kənˌsɪdəˈreɪʃn|n. 考虑；体贴；尊重|careful thought; respect",
+these:"ðiːz|pron. 这些 / adj. 这些|plural of 'this'",
+twenty:"ˈtwenti|num. 二十|the number 20",
+least:"liːst|adj. 最少的 / adv. 最少；至少|smallest in amount; at least: not less than",
+ah:"ɑː|int. 啊；唉|used to express sadness, surprise, etc.",
+suffer:"ˈsʌfə|v. 受苦；遭受|to experience pain or unhappiness",
+hope:"həʊp|v. 希望 / n. 希望|to want something to happen",
+get:"ɡet|v. 得到；使；变得；（get over）克服|to obtain; to cause; get over: recover from",
+live:"lɪv|v. 活着；生活；居住|to be alive; live to see: stay alive until",
+many:"ˈmeni|adj. 许多的 / pron. 许多|a large number of",
+use:"juːs|n. 用处；使用 / v. 使用|be no use: be useless",
+since:"sɪns|conj. 因为；自从|because; from a time in the past",
+should:"ʃʊd|aux. 应该；万一|used to say what is right; if … should: in case",
+depend:"dɪˈpend|v. 依靠；取决于；（depend upon it）放心吧|to rely on; depend upon it: you can be sure",
+upon:"əˈpɒn|prep. 在…上（同 on）|on (more formal)",
+there:"ðeə|adv. 那里 / pron. （用于 there be 句型）|in that place; used to say something exists",
+odd:"ɒd|adj. 古怪的；奇数的|strange or unusual",
+mixture:"ˈmɪkstʃə|n. 混合；混合物|a combination of different things",
+quick:"kwɪk|adj. 快的；机敏的|fast; quick parts: a clever mind",
+part:"pɑːt|n. 部分；（复数，旧）才能|a piece of something; (old use) parts: abilities",
+sarcastic:"sɑːˈkæstɪk|adj. 讽刺的；挖苦的|saying the opposite of what you mean in order to mock",
+humour:"ˈhjuːmə|n. 幽默；情绪|the ability to be funny; mood",
+reserve:"rɪˈzɜːv|n. 矜持；储备 / v. 保留|the quality of not showing your feelings",
+caprice:"kəˈpriːs|n. 反复无常；任性|a sudden change of mood or behaviour",
+experience:"ɪkˈspɪəriəns|n. 经验；经历 / v. 经历|knowledge gained over time; an event you live through",
+"three-and-twenty":"ˌθriː ən ˈtwenti|num. 二十三（旧式说法）|(old use) twenty-three",
+insufficient:"ˌɪnsəˈfɪʃnt|adj. 不足的；不够的|not enough",
+understand:"ˌʌndəˈstænd|v. 理解；明白|to know the meaning or nature of",
+character:"ˈkærəktə|n. 性格；角色；字符|the qualities that make a person who they are",
+less:"les|adv. 较少；不那么 / adj. 较少的|to a smaller degree",
+difficult:"ˈdɪfɪkəlt|adj. 困难的；难对付的|not easy",
+develop:"dɪˈveləp|v. 发展；（旧）看透；展开|to grow; (old use) to reveal or understand fully",
+mean:"miːn|adj. 平庸的；吝啬的 / v. 意思是|(old use) poor, low in quality; to intend",
+understanding:"ˌʌndəˈstændɪŋ|n. 理解力；见解；谅解|the ability to understand; intelligence",
+information:"ˌɪnfəˈmeɪʃn|n. 信息；（旧）学识|facts; (old use) knowledge",
+uncertain:"ʌnˈsɜːtn|adj. 不确定的；易变的|not sure; changeable",
+temper:"ˈtempə|n. 脾气；性情|the way someone tends to feel; mood",
+discontented:"ˌdɪskənˈtentɪd|adj. 不满的；不称心的|not satisfied",
+fancy:"ˈfænsi|v. 以为；想象；喜欢 / adj. 花哨的|to imagine or believe something",
+herself:"hɜːˈself|pron. 她自己|reflexive form of 'she'",
+nervous:"ˈnɜːvəs|adj. 紧张的；神经质的；神经的|easily worried; having weak nerves",
+business:"ˈbɪznəs|n. 事务；生意；职责|important work or concern",
+life:"laɪf|n. 生活；生命；一生|the period between birth and death",
+solace:"ˈsɒləs|n. 安慰；慰藉|comfort when you are sad",
+news:"njuːz|n. 新闻；消息|new information about recent events",
+tomorrow:"təˈmɒrəʊ|n. 明天；未来 / adv. 在明天|the day after today"
+};
+const IRR={is:'be',am:'be',are:'be',was:'be',were:'be',been:'be',being:'be',has:'have',had:'have',does:'do',did:'do',done:'do',said:'say',heard:'hear',told:'tell',made:'make',taken:'take',took:'take',came:'come',men:'man',children:'child',thought:'think',known:'know',chose:'choose',gave:'give',given:'give'};
+
+/* ---------- 第一章正文：每个段落是若干 [原句, 译文]，译文模拟系统离线翻译 ---------- */
+const PARAS=[
+[["It is a truth universally acknowledged, that a single man in possession of a good fortune, must be in want of a wife.","有钱的单身男子必定想娶一位妻子，这是一条举世公认的真理。"]],
+[["However little known the feelings or views of such a man may be on his first entering a neighbourhood, this truth is so well fixed in the minds of the surrounding families, that he is considered the rightful property of some one or other of their daughters.","这样的男子初到一个地方，无论人们对他的性情和想法知道得多么少，这条真理早已深深扎根在周围人家的心里，大家总认为他理所当然是自家某个女儿的囊中之物。"]],
+[["“My dear Mr. Bennet,” said his lady to him one day, “have you heard that Netherfield Park is let at last?”","一天，班纳特太太对丈夫说：“亲爱的班纳特先生，你听说了吗？内瑟菲尔德庄园终于租出去了。”"]],
+[["Mr. Bennet replied that he had not.","班纳特先生回答说没听说。"]],
+[["“But it is,” returned she; “for Mrs. Long has just been here, and she told me all about it.”","“可它确实租出去了，”她说，“朗太太刚来过，把这事原原本本都告诉我了。”"]],
+[["Mr. Bennet made no answer.","班纳特先生没有作声。"]],
+[["“Do you not want to know who has taken it?” cried his wife impatiently.","“你难道不想知道是谁租下了它吗？”他太太不耐烦地嚷道。"]],
+[["“You want to tell me, and I have no objection to hearing it.”","“是你想告诉我，我也不反对听一听。”"]],
+[["This was invitation enough.","这就足够让她说下去了。"]],
+[["“Why, my dear, you must know, Mrs. Long says that Netherfield is taken by a young man of large fortune from the north of England; that he came down on Monday in a chaise and four to see the place, and was so much delighted with it, that he agreed with Mr. Morris immediately; that he is to take possession before Michaelmas, and some of his servants are to be in the house by the end of next week.”","“哎呀，亲爱的，你要知道，朗太太说，租下内瑟菲尔德的是英格兰北部一位很有钱的年轻人；他星期一坐着一辆四匹马拉的轻便马车来看房子，看得非常满意，当场就和莫里斯先生谈妥了；他要在米迦勒节之前搬进来，下周末以前就会有几个仆人先住进去。”"]],
+[["“What is his name?”","“他叫什么名字？”"]],
+[["“Bingley.”","“宾利。”"]],
+[["“Is he married or single?”","“他结婚了还是单身？”"]],
+[["“Oh! Single, my dear, to be sure!","“哦！当然是单身，亲爱的！"],["A single man of large fortune; four or five thousand a year.","一个有钱的单身汉，每年有四五千镑的收入。"],["What a fine thing for our girls!”","这对我们的女儿们来说真是件大好事！”"]],
+[["“How so?","“怎么说？"],["How can it affect them?”","这跟她们有什么关系？”"]],
+[["“My dear Mr. Bennet,” replied his wife, “how can you be so tiresome!","“亲爱的班纳特先生，”他太太答道，“你怎么这么烦人！"],["You must know that I am thinking of his marrying one of them.”","你应该明白，我是在想让他娶她们中的一个。”"]],
+[["“Is that his design in settling here?”","“他搬到这里来，就是打的这个主意吗？”"]],
+[["“Design!","“主意！"],["Nonsense, how can you talk so!","胡说，你怎么能这么说话！"],["But it is very likely that he may fall in love with one of them, and therefore you must visit him as soon as he comes.”","不过他很可能会爱上她们中的一个，所以他一来，你就得去拜访他。”"]],
+[["“I see no occasion for that.","“我看没这个必要。"],["You and the girls may go, or you may send them by themselves, which perhaps will be still better, for as you are as handsome as any of them, Mr. Bingley may like you the best of the party.”","你和女儿们去就行，或者干脆让她们自己去，那样也许更好，因为你跟她们一样漂亮，宾利先生说不定会在这群人里最喜欢你。”"]],
+[["“My dear, you flatter me.","“亲爱的，你太抬举我了。"],["I certainly have had my share of beauty, but I do not pretend to be anything extraordinary now.","我年轻时确实也算漂亮过，但如今可不敢说自己有什么出众之处。"],["When a woman has five grown-up daughters, she ought to give over thinking of her own beauty.”","一个女人有了五个成年的女儿，就不该再惦记自己的美貌了。”"]],
+[["“In such cases, a woman has not often much beauty to think of.”","“这种情况下，女人往往也没剩多少美貌可惦记了。”"]],
+[["“But, my dear, you must indeed go and see Mr. Bingley when he comes into the neighbourhood.”","“不过，亲爱的，宾利先生搬来以后，你真的一定要去见见他。”"]],
+[["“It is more than I engage for, I assure you.”","“这我可不敢答应，老实跟你说吧。”"]],
+[["“But consider your daughters.","“可你得为女儿们想想。"],["Only think what an establishment it would be for one of them.","想想看，要是她们中有一个能嫁过去，那是多好的归宿。"],["Sir William and Lady Lucas are determined to go, merely on that account, for in general, you know, they visit no newcomers.","威廉爵士和卢卡斯夫人就是为了这个才决定去拜访的，你知道，他们一般从不拜访新搬来的人。"],["Indeed you must go, for it will be impossible for us to visit him if you do not.”","你真的必须去，你要是不去，我们就没法去拜访他了。”"]],
+[["“You are over-scrupulous, surely.","“你也太拘礼了。"],["I dare say Mr. Bingley will be very glad to see you; and I will send a few lines by you to assure him of my hearty consent to his marrying whichever he chooses of the girls; though I must throw in a good word for my little Lizzy.”","我敢说宾利先生见到你会很高兴；我可以写几句话让你捎去，告诉他我衷心同意他从女儿们当中随便挑一个娶；不过我得替我的小丽萃多说几句好话。”"]],
+[["“I desire you will do no such thing.","“我希望你别这么做。"],["Lizzy is not a bit better than the others; and I am sure she is not half so handsome as Jane, nor half so good-humoured as Lydia.","丽萃一点也不比别的女儿强；她远没有简漂亮，也远没有莉迪亚脾气好。"],["But you are always giving her the preference.”","可你总是偏爱她。”"]],
+[["“They have none of them much to recommend them,” replied he; “they are all silly and ignorant like other girls; but Lizzy has something more of quickness than her sisters.”","“她们谁都没什么值得称道的，”他答道，“她们跟别的女孩一样，又傻又无知；倒是丽萃比她的姐妹们机灵些。”"]],
+[["“Mr. Bennet, how can you abuse your own children in such a way?","“班纳特先生，你怎么能这样糟蹋自己的孩子？"],["You take delight in vexing me.","你就是喜欢气我。"],["You have no compassion for my poor nerves.”","你一点也不体谅我这可怜的神经。”"]],
+[["“You mistake me, my dear.","“你误会我了，亲爱的。"],["I have a high respect for your nerves.","我非常尊重你的神经。"],["They are my old friends.","它们是我的老朋友了。"],["I have heard you mention them with consideration these last twenty years at least.”","至少这二十年来，我一直听你郑重其事地提起它们。”"]],
+[["“Ah, you do not know what I suffer.”","“唉，你不知道我受的是什么罪。”"]],
+[["“But I hope you will get over it, and live to see many young men of four thousand a year come into the neighbourhood.”","“不过我希望你能熬过去，活着看到许多年收入四千镑的年轻人搬到这附近来。”"]],
+[["“It will be no use to us, if twenty such should come, since you will not visit them.”","“就算来二十个这样的人，对我们也没用，反正你又不去拜访他们。”"]],
+[["“Depend upon it, my dear, that when there are twenty, I will visit them all.”","“放心吧，亲爱的，等来了二十个，我一定挨个去拜访。”"]],
+[["Mr. Bennet was so odd a mixture of quick parts, sarcastic humour, reserve, and caprice, that the experience of three-and-twenty years had been insufficient to make his wife understand his character.","班纳特先生是个古怪的人，机敏、爱挖苦人、矜持，又喜怒无常，以至于二十三年的共同生活都没能让他太太摸透他的性格。"],["Her mind was less difficult to develop.","她的心思就不难看透了。"],["She was a woman of mean understanding, little information, and uncertain temper.","她是个见识浅薄、孤陋寡闻、喜怒无常的女人。"],["When she was discontented, she fancied herself nervous.","她一不称心，就觉得自己神经衰弱。"],["The business of her life was to get her daughters married; its solace was visiting and news.","她这辈子的头等大事就是把女儿们嫁出去；她的慰藉则是串门和打听新闻。"]]
+];
+
+/* ---------- 查词：原词 → 不规则表 → 规则还原 ---------- */
+const PC={};
+function entry(k){
+  if(!DICT[k]) return null;
+  if(PC[k]) return PC[k];
+  const [ph,ss,en]=DICT[k].split('|');
+  const groups=ss.split(' / ').map(g=>{const i=g.indexOf(' ');return {pos:g.slice(0,i),gl:g.slice(i+1).split('；').map(x=>x.trim()).filter(Boolean)}});
+  return PC[k]={key:k,ph,groups,en};
+}
+function cands(w){
+  const c=[w];
+  const add=x=>{if(x&&x.length>1&&!c.includes(x))c.push(x)};
+  if(IRR[w]) add(IRR[w]);
+  if(/'s$/.test(w)) add(w.slice(0,-2));
+  if(/ies$/.test(w)) add(w.slice(0,-3)+'y');
+  if(/ied$/.test(w)) add(w.slice(0,-3)+'y');
+  if(/es$/.test(w)) add(w.slice(0,-2));
+  if(/s$/.test(w)) add(w.slice(0,-1));
+  if(/ed$/.test(w)){const b=w.slice(0,-2);add(b);add(w.slice(0,-1));if(/(.)\1$/.test(b))add(b.slice(0,-1));}
+  if(/ing$/.test(w)){const b=w.slice(0,-3);add(b);add(b+'e');if(/(.)\1$/.test(b))add(b.slice(0,-1));}
+  return c;
+}
+function lookup(surface){
+  const w=surface.toLowerCase().replace(/’/g,"'");
+  for(const k of cands(w)){const e=entry(k);if(e)return e;}
+  return null;
+}
+function flat(e){const out=[];e.groups.forEach(g=>g.gl.forEach(x=>{if(x[0]!=='（'&&!out.includes(x))out.push(x)}));return out;}
+const POSZH={'name.':'专名'};
+
+/* ---------- 设置 ---------- */
+/* modeP / modeL：竖屏和横屏各自记住翻页方式；横屏宽屏的 page = 双页 */
+const DEF={font:'iowan',size:19,bold:false,lh:1.6,ls:0,ps:0.4,mg:24,justify:true,theme:'white',follow:true,modeP:'page',modeL:'page',tier:'min',n:2,bfs:15,annot:false};
+const KEYS={type:['font','size','bold','lh','ls','ps','mg','justify','theme','follow','modeP','modeL'],gloss:['tier','n','bfs','annot']};
+const SETTINGS_KEY='rp.settings.v2';
+const S=Object.assign({},DEF,store.get(SETTINGS_KEY,{}));
+/* 与 Apple Books 相同的字体列表；Literata 是安卓版的默认字体 */
+const FONTS={
+  iowan:{name:'Iowan',tag:'苹果默认',stack:'"Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif'},
+  charter:{name:'Charter',stack:'Charter, "Bitstream Charter", Georgia, serif'},
+  georgia:{name:'Georgia',stack:'Georgia, serif'},
+  palatino:{name:'Palatino',stack:'Palatino, "Palatino Linotype", "Book Antiqua", Georgia, serif'},
+  athelas:{name:'Athelas',stack:'Athelas, Georgia, serif'},
+  newyork:{name:'New York',stack:'ui-serif, "New York", Georgia, serif'},
+  seravek:{name:'Seravek',stack:'Seravek, "Gill Sans", "Avenir Next", system-ui, sans-serif'},
+  sf:{name:'San Francisco',stack:'-apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif'},
+  literata:{name:'Literata',tag:'安卓默认',stack:'"Literata", Georgia, serif'}
+};
+if(!FONTS[S.font]) S.font=DEF.font;
+const THEMES=[{id:'white',name:'白色',bg:'#FFFFFF',fg:'#1B1B1D'},{id:'paper',name:'纸张',bg:'#F6EEDD',fg:'#3A2D21'},{id:'quiet',name:'安静',bg:'#4A4A4E',fg:'#DEDEE0'},{id:'night',name:'夜间',bg:'#0F0F10',fg:'#C8C8CD'}];
+const FMT={size:v=>v+' px',lh:v=>v.toFixed(2),ls:v=>(v>0?'+':'')+Math.round(v*100)+'%',ps:v=>v.toFixed(1),mg:v=>v+' px',bfs:v=>v+' px'};
+const TIERNAME={min:'极简',brief:'简洁',full:'完整'};
+const minText=e=>flat(e).slice(0,S.n).join('；');
+const briefText=e=>flat(e).join('；');
+
+/* ---------- 图标 ---------- */
+const svg=p=>'<svg viewBox="0 0 24 24" aria-hidden="true">'+p+'</svg>';
+const IC={
+  back:svg('<path d="M15 5l-7 7 7 7"/>'),
+  toc:svg('<path d="M9 6h11M9 12h11M9 18h11"/><path d="M4.5 6h.01M4.5 12h.01M4.5 18h.01" stroke-width="2.6"/>'),
+  search:svg('<circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/>'),
+  mark:svg('<path d="M7 3.5h10v17l-5-3.6-5 3.6z"/>'),
+  star:svg('<path d="M12 3.6l2.55 5.2 5.7.83-4.13 4.02.98 5.68L12 16.64l-5.1 2.69.98-5.68L3.75 9.63l5.7-.83z"/>'),
+  copy:svg('<rect x="8.5" y="8.5" width="11" height="11" rx="2"/><path d="M15.5 8.5V6A1.5 1.5 0 0 0 14 4.5H6A1.5 1.5 0 0 0 4.5 6v8A1.5 1.5 0 0 0 6 15.5h2.5"/>'),
+  close:svg('<path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/>'),
+  plus:svg('<path d="M12 5v14M5 12h14"/>'),
+  books:svg('<rect x="3.5" y="4" width="4.5" height="16" rx="1"/><rect x="9.5" y="4" width="4.5" height="16" rx="1"/><path d="M15.4 5.3l3.3-.9 3 14.4-3.3.9z"/>'),
+  vocab:svg('<path d="M6 3.5h12v17H6z"/><path d="M9.5 8h5M9.5 12h5M9.5 16h3"/>'),
+  prefs:svg('<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>'),
+  ret:svg('<path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>')
+};
+
+/* ---------- 状态 ---------- */
+const stage=$('#stage'),dwrap=$('#dwrap'),device=$('#device'),screen=$('#screen'),ov=$('#ov');
+const reader=$('#vReader'),rbody=$('#rbody'),flow=$('#flow'),prog=$('#prog');
+const DEVICES={
+  iphone:{w:393,h:852,r:55,b:11,top:54,bot:28,kind:'island'},
+  android:{w:412,h:915,r:38,b:9,top:36,bot:18,kind:'hole'},
+  ipad:{w:820,h:1180,r:26,b:16,top:26,bot:20,kind:'none'},
+  ipadl:{w:1180,h:820,r:26,b:16,top:26,bot:20,kind:'none'},
+  fit:{w:0,h:0,r:0,b:0,top:12,bot:12,kind:'none'}
+};
+let dev='iphone',SC=1,DW=393,DH=852,IT=54,IB=28;
+let page=0,pages=1,pageW=1;
+let curTip=null,curCard=null,curScard=null,curWord=null,curSent=null,curSheet=null;
+let readerOpen=false,backPos=null,sheetTab='type',sliding=false;
+const tcache=new Set();
+function findSent(word){const re=new RegExp('\\b'+escRe(word)+'\\b','i');for(let p=0;p<PARAS.length;p++)for(let s=0;s<PARAS[p].length;s++)if(re.test(PARAS[p][s][0]))return {p,s};return {p:0,s:0};}
+const EXAMPLES=[['acknowledge','acknowledged','2026-09-26'],['chaise','chaise','2026-09-27'],['caprice','caprice','2026-09-28']]
+  .map(([w,sf,d],i)=>Object.assign({id:'ex'+i,word:w,surface:sf,at:Date.parse(d+'T09:00:00'),ex:true},findSent(sf)));
+let vocab=store.get('rp.vocab',null)||EXAMPLES.slice();
+let marks=store.get('rp.marks',[]);
+const fmtDate=t=>{const d=new Date(t);return (d.getMonth()+1)+'月'+d.getDate()+'日';};
+
+/* ---------- 正文 ---------- */
+function tokens(text){
+  let out='',last=0,m;const re=/[A-Za-z]+(?:[-'’][A-Za-z]+)*/g;
+  while((m=re.exec(text))){out+=esc(text.slice(last,m.index))+'<span class="w">'+m[0]+'</span>';last=re.lastIndex;}
+  return out+esc(text.slice(last));
+}
+function buildFlow(){
+  let h='<header class="chap"><div class="chap-k">Pride and Prejudice</div><h2 class="chap-t">Chapter 1</h2></header>';
+  PARAS.forEach((p,pi)=>{h+='<p>'+p.map(([en],si)=>'<span class="s" data-p="'+pi+'" data-s="'+si+'">'+tokens(en)+'</span>').join(' ')+'</p>';});
+  h+='<div class="chap-end">第 1 章完 · 原型只包含这一章<span class="endmark"></span></div>';
+  flow.innerHTML=h;
+}
+const sentEl=(p,s)=>flow.querySelector('.s[data-p="'+p+'"][data-s="'+s+'"]');
+
+/* ---------- 设备画框 ---------- */
+function fit(){
+  const d=DEVICES[dev],sw=stage.clientWidth,sh=stage.clientHeight;
+  let W,H,b,r;
+  if(dev==='fit'){W=sw;H=sh;b=0;r=0;}else{W=d.w;H=d.h;b=d.b;r=d.r;}
+  const ow=W+2*b,oh=H+2*b,m=dev==='fit'?0:26;
+  SC=dev==='fit'?1:Math.min(1,(sw-m*2)/ow,(sh-m*2)/oh);
+  device.dataset.dev=dev;device.dataset.kind=d.kind;
+  Object.assign(device.style,{width:ow+'px',height:oh+'px',padding:b+'px',borderRadius:r+'px',transform:'scale('+SC+')'});
+  dwrap.style.width=ow*SC+'px';dwrap.style.height=oh*SC+'px';
+  Object.assign(screen.style,{width:W+'px',height:H+'px',borderRadius:Math.max(0,r-b)+'px'});
+  DW=W;DH=H;IT=d.top;IB=d.bot;
+  screen.style.setProperty('--it',IT+'px');screen.style.setProperty('--ib',IB+'px');
+  screen.classList.toggle('wide',W>=700);
+}
+function setDevice(k){
+  dev=k;store.set('rp.dev',k);
+  $$('.devs button').forEach(b=>b.classList.toggle('on',b.dataset.dev===k));
+  relayout();
+}
+function relayout(){
+  const a=readerOpen?anchor():null;
+  closeOverlays();closeSheet(true);fit();
+  if(readerOpen){layout();if(a)restore(a);}
+}
+
+/* ---------- 主题与排版 ---------- */
+const mq=window.matchMedia('(prefers-color-scheme: dark)');
+function sysDark(){const t=document.documentElement.getAttribute('data-theme');if(t==='dark')return true;if(t==='light')return false;return mq.matches;}
+const effTheme=()=>(S.follow&&sysDark())?'night':S.theme;
+const landscape=()=>DW>DH;
+const MODE=()=>landscape()?S.modeL:S.modeP;          /* 按当前方向应该用的方式 */
+const RM=()=>reader.dataset.mode||MODE();              /* 当前已经排好的方式 */
+function apply(){
+  store.set(SETTINGS_KEY,S);
+  const st=screen.style;
+  st.setProperty('--fs',S.size+'px');st.setProperty('--lh',S.lh);st.setProperty('--ls',S.ls+'em');st.setProperty('--ps',S.ps+'em');
+  st.setProperty('--mg',S.mg+'px');st.setProperty('--font',FONTS[S.font].stack);st.setProperty('--fw',S.bold?600:400);
+  st.setProperty('--ta',S.justify?'justify':'left');st.setProperty('--bfs',S.bfs+'px');
+  screen.dataset.t=effTheme();screen.dataset.ui=sysDark()?'dark':'light';
+  reader.classList.toggle('annot',S.annot);
+  if(readerOpen){
+    const rm=reader.dataset.mode;
+    const atStart=!rm||(rm==='page'?page===0:rbody.scrollTop<4);
+    const a=atStart?null:anchor();
+    layout();
+    if(a)restore(a);
+    else if(RM()==='page')goPage(0,true);
+    else rbody.scrollTop=0;
+  }
+  refreshSheet();
+}
+function layout(){
+  reader.dataset.mode=MODE();
+  if(RM()==='page'){paginate();}
+  else{['width','height','paddingLeft','paddingRight','columnGap','columnWidth','transform'].forEach(p=>flow.style[p]='');updateProgress();}
+}
+function paginate(){
+  const W=rbody.clientWidth,H=rbody.clientHeight;pageW=W;
+  const c=(W>H&&W>=900)?2:1;
+  const m=c===2?Math.max(S.mg,44):S.mg;               /* 双页时外侧页边和中缝至少约 44px */
+  const colW=Math.max(140,Math.min(W/c-2*m,S.size*34));
+  const g=W/c-colW;
+  Object.assign(flow.style,{width:W+'px',height:H+'px',paddingLeft:g/2+'px',paddingRight:g/2+'px',columnGap:g+'px',columnWidth:(colW-0.5)+'px'});
+  screen.style.setProperty('--edge',Math.max(16,g/2-2)+'px');
+  flow.style.transition='none';flow.style.transform='translateX('+(-page*W)+'px)';
+  const fr=flow.getBoundingClientRect(),er=$('.endmark',flow).getBoundingClientRect();
+  pages=Math.max(1,Math.floor(((er.left-fr.left)/SC)/W)+1);
+  goPage(Math.min(page,pages-1),true);
+}
+function goPage(p,instant){
+  page=clamp(p,0,pages-1);
+  if(instant)flow.style.transition='none';
+  flow.style.transform='translateX('+(-page*pageW)+'px)';
+  if(instant){void flow.offsetWidth;flow.style.transition='';}
+  if(!instant)closeOverlays();
+  updateProgress();savePosSoon();
+}
+function pageOf(el){
+  const fr=flow.getBoundingClientRect();const r=el.getClientRects()[0]||el.getBoundingClientRect();
+  return clamp(Math.floor(((r.left-fr.left)/SC+1)/pageW),0,pages-1);
+}
+function anchor(){
+  const ss=$$('.s',flow);
+  if(RM()==='page')return ss.find(s=>pageOf(s)===page)||null;
+  const top=rbody.getBoundingClientRect().top+(IT+20)*SC;
+  return ss.find(s=>s.getBoundingClientRect().bottom>top)||null;
+}
+function restore(el,smooth){
+  if(!el)return;
+  if(RM()==='page'){goPage(pageOf(el),!smooth);return;}
+  const sr=rbody.getBoundingClientRect(),r=el.getBoundingClientRect();
+  const top=rbody.scrollTop+(r.top-sr.top)/SC-(IT+34);
+  rbody.scrollTo({top:Math.max(0,top),behavior:smooth?'smooth':'auto'});
+}
+function progressFrac(){
+  if(RM()==='page')return pages>1?page/(pages-1):1;
+  const max=rbody.scrollHeight-rbody.clientHeight;return max>0?rbody.scrollTop/max:0;
+}
+function updateProgress(){
+  const f=progressFrac(),pct=Math.round(f*100);
+  if(RM()==='page'){
+    $('#rfoot').textContent=(page+1)+' / '+pages;
+    $('#progL').textContent='第 '+(page+1)+' 页，共 '+pages+' 页 · 本章还剩 '+(pages-page-1)+' 页';
+  }else{
+    $('#rfoot').textContent=pct+'%';
+    $('#progL').textContent='第 1 章 · 已读 '+pct+'%';
+  }
+  if(!sliding)prog.value=Math.round(f*1000);
+  $('#bMark').classList.toggle('on',isMarked());
+}
+function savePos(){
+  const atStart=RM()==='page'?page===0:rbody.scrollTop<4;
+  const a=atStart?null:anchor();
+  store.set('rp.pos',a?{p:+a.dataset.p,s:+a.dataset.s}:null);
+  store.set('rp.frac',progressFrac());
+}
+let saveT;function savePosSoon(){clearTimeout(saveT);saveT=setTimeout(savePos,300);}
+
+/* ---------- 视图切换 ---------- */
+function showView(v){
+  readerOpen=v==='reader';
+  $('#vShelf').hidden=v!=='shelf';$('#vVocab').hidden=v!=='vocab';$('#vPrefs').hidden=v!=='prefs';
+  reader.hidden=!readerOpen;$('#tabs').hidden=readerOpen;$('#sbar').hidden=readerOpen;
+  $$('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.view===v));
+  if(!readerOpen){closeOverlays();closeSheet(true);setChrome(false);$('#backPill').hidden=true;}
+  if(v==='vocab')renderVocab();
+  if(v==='prefs')$('#prefTier').textContent=TIERNAME[S.tier];
+  if(v==='shelf')renderShelf();
+}
+function renderShelf(){
+  const f=store.get('rp.frac',0)||0;
+  $('#contBar').style.width=Math.round(f*100)+'%';
+  $('#contMeta').textContent=f>0?'第 1 章 · 已读 '+Math.round(f*100)+'%':'第 1 章 · 刚开始';
+}
+function openReader(target){
+  showView('reader');setChrome(false);
+  rbody.scrollTop=0;page=0;delete reader.dataset.mode;
+  apply();
+  const pos=target||store.get('rp.pos',null);
+  const el=pos&&sentEl(pos.p,pos.s);
+  if(el){restore(el);if(target)setTimeout(()=>flash(el),150);}
+  updateProgress();
+  if(!store.get('rp.coach',false)){store.set('rp.coach',true);setTimeout(()=>toast('点单词查词 · 长按句子翻译 · 点空白处呼出工具栏',3800),300);}
+}
+function setChrome(v){reader.classList.toggle('chrome',v);}
+
+/* ---------- 浮层定位 ---------- */
+function lrect(r){const sr=screen.getBoundingClientRect();return {left:(r.left-sr.left)/SC,top:(r.top-sr.top)/SC,right:(r.right-sr.left)/SC,bottom:(r.bottom-sr.top)/SC};}
+function wordRect(el){const rs=el.getClientRects();return lrect(rs[0]||el.getBoundingClientRect());}
+function sentRect(el){
+  let L=1e9,T=1e9,R=-1e9,B=-1e9;
+  for(const r of el.getClientRects()){const x=lrect(r);if(x.right<0||x.left>DW||x.bottom<0||x.top>DH)continue;L=Math.min(L,x.left);T=Math.min(T,x.top);R=Math.max(R,x.right);B=Math.max(B,x.bottom);}
+  return L>R?wordRect(el):{left:L,top:T,right:R,bottom:B};
+}
+function place(el,a,o){
+  o=o||{};const gap=o.gap||10,pad=10,tl=IT+6,bl=DH-IB-6;
+  el.style.maxHeight='';el.style.left='0px';el.style.top='0px';
+  const bw=el.offsetWidth;let bh=el.offsetHeight;
+  const spA=a.top-gap-tl,spB=bl-(a.bottom+gap);
+  let side;
+  if(o.prefer==='below')side=bh<=spB?'below':bh<=spA?'above':(spB>=spA?'below':'above');
+  else side=bh<=spA?'above':bh<=spB?'below':(spA>=spB?'above':'below');
+  const sp=side==='above'?spA:spB;
+  let pinned=false;
+  if(bh>sp){if(sp<130)pinned=true;else{el.style.maxHeight=sp+'px';bh=el.offsetHeight;}}
+  const cx=(a.left+a.right)/2;
+  const left=clamp(cx-bw/2,pad,DW-bw-pad);
+  let top;
+  if(pinned){el.style.maxHeight=Math.round(DH*0.45)+'px';bh=el.offsetHeight;top=bl-bh;side='none';}
+  else top=side==='above'?a.top-gap-bh:a.bottom+gap;
+  el.style.left=left+'px';el.style.top=top+'px';el.dataset.side=side;
+  el.style.setProperty('--ax',clamp(cx-left,16,bw-16)+'px');
+}
+const hasOverlay=()=>!!(curTip||curCard||curScard);
+function closeOverlays(){
+  [curTip,curCard,curScard].forEach(x=>x&&x.remove());curTip=curCard=curScard=null;
+  if(curWord){curWord.classList.remove('on');curWord=null;}
+  if(curSent){curSent.classList.remove('sel');curSent=null;}
+}
+
+/* ---------- 点词 ---------- */
+function showWord(span){
+  closeOverlays();setChrome(false);
+  const e=lookup(span.textContent);
+  if(S.annot&&e){
+    if(span.classList.contains('annot')){openCard(span,e);return;}
+    span.dataset.gloss=flat(e).slice(0,Math.min(S.n,2)).join('；');span.classList.add('annot');
+    return;
+  }
+  span.classList.add('on');curWord=span;
+  if(S.tier==='full'){openCard(span,e);return;}
+  const el=document.createElement('div');el.className='tip';el.setAttribute('role','status');
+  el.innerHTML=(e?'<span>'+esc(S.tier==='min'?minText(e):briefText(e))+'</span>':'<span class="miss">原型未收录这个词</span>')+'<i class="arrow"></i>';
+  el.addEventListener('click',()=>openCard(span,e));
+  ov.appendChild(el);place(el,wordRect(span),{gap:9});curTip=el;
+}
+function ctxHTML(sent,surface){
+  const m=sent.match(new RegExp('\\b'+escRe(surface)+'\\b','i'));if(!m)return esc(sent);
+  const i=m.index,a=Math.max(0,i-60),b=Math.min(sent.length,i+m[0].length+60);
+  return (a>0?'…':'')+esc(sent.slice(a,i))+'<b>'+esc(m[0])+'</b>'+esc(sent.slice(i+m[0].length,b))+(b<sent.length?'…':'');
+}
+const inVocab=k=>vocab.some(v=>v.word===k);
+function openCard(span,e){
+  closeOverlays();span.classList.add('on');curWord=span;
+  const surface=span.textContent,w=surface.toLowerCase(),s=span.closest('.s');
+  const sent=PARAS[s.dataset.p][s.dataset.s][0];
+  const el=document.createElement('div');el.className='card';el.setAttribute('role','dialog');el.setAttribute('aria-label',surface+' 的释义');
+  if(!e){
+    el.innerHTML='<div class="cd-body"><div class="cd-head"><div class="cd-w"><span class="cd-word">'+esc(surface)+'</span></div></div><p class="cd-miss">原型的小词典里没有这个词。App 里查不到时，会用系统翻译翻这个词作为兜底。</p></div><i class="arrow"></i>';
+  }else{
+    const lem=e.key!==w?'<div class="cd-lem">原形 <b>'+esc(e.key)+'</b></div>':(IRR[w]&&IRR[w]!==e.key?'<div class="cd-lem">也是 <b>'+IRR[w]+'</b> 的变形</div>':'');
+    el.innerHTML='<div class="cd-body">'+
+      '<div class="cd-head"><div class="cd-w"><span class="cd-word">'+esc(surface)+'</span><span class="cd-ph">/'+esc(e.ph)+'/</span></div>'+
+      '<button class="ib sm" data-act="copy" aria-label="复制单词">'+IC.copy+'</button>'+
+      '<button class="ib sm star'+(inVocab(e.key)?' on':'')+'" data-act="star" aria-label="加入生词本">'+IC.star+'</button></div>'+lem+
+      '<section class="cd-sec"><div class="cd-lab">英汉 · ECDICT</div>'+e.groups.map(g=>'<div class="cd-row"><span class="pos'+(POSZH[g.pos]?' zh':'')+'">'+(POSZH[g.pos]||g.pos)+'</span><span>'+esc(g.gl.join('；'))+'</span></div>').join('')+'</section>'+
+      '<section class="cd-sec"><div class="cd-lab">英英 · Wiktionary</div><p class="cd-en">'+esc(e.en)+'</p></section>'+
+      '<section class="cd-sec"><div class="cd-lab">本句</div><p class="cd-ctx">'+ctxHTML(sent,surface)+'</p></section>'+
+      (span.classList.contains('annot')?'<button class="lnk" data-act="unannot">移除这个词的行间注音</button>':'')+
+      '<div class="cd-foot">导入牛津等 MDX 词典后，会作为第三个词典显示在这里。</div></div><i class="arrow"></i>';
+  }
+  el.addEventListener('click',ev=>{
+    const b=ev.target.closest('[data-act]');if(!b)return;
+    if(b.dataset.act==='copy')copy(surface);
+    if(b.dataset.act==='star'){toggleVocab(e,span);b.classList.toggle('on',inVocab(e.key));}
+    if(b.dataset.act==='unannot'){span.classList.remove('annot');delete span.dataset.gloss;closeOverlays();}
+  });
+  ov.appendChild(el);place(el,wordRect(span),{gap:10});curCard=el;
+}
+function toggleVocab(e,span){
+  const i=vocab.findIndex(v=>v.word===e.key);
+  if(i>=0){vocab.splice(i,1);toast('已从生词本移除');}
+  else{const s=span.closest('.s');vocab.unshift({id:'v'+Date.now(),word:e.key,surface:span.textContent,p:+s.dataset.p,s:+s.dataset.s,at:Date.now()});toast('已加入生词本');}
+  store.set('rp.vocab',vocab);
+}
+
+/* ---------- 长按整句 ---------- */
+function selectSentence(s){
+  closeOverlays();setChrome(false);
+  s.classList.add('sel');curSent=s;
+  const [en,zh]=PARAS[s.dataset.p][s.dataset.s],key=s.dataset.p+'-'+s.dataset.s,cached=tcache.has(key);
+  const el=document.createElement('div');el.className='scard';el.setAttribute('role','dialog');el.setAttribute('aria-label','句子翻译');
+  const fill=c=>{
+    el.innerHTML='<div class="cd-body" style="padding:0"><div class="sc-tr">'+(c?esc(zh):'<span class="sk"></span><span class="sk short"></span>')+'</div>'+
+      '<div class="sc-meta"><span class="sc-src">'+(c?(cached?'系统离线翻译 · 已缓存':'系统离线翻译'):'翻译中…')+'</span>'+
+      '<button class="sc-btn" data-act="en">复制原句</button><button class="sc-btn" data-act="zh">复制译文</button></div></div><i class="arrow"></i>';
+  };
+  fill(cached);
+  el.addEventListener('click',ev=>{const b=ev.target.closest('[data-act]');if(!b)return;copy(b.dataset.act==='en'?en:zh);});
+  ov.appendChild(el);curScard=el;place(el,sentRect(s),{prefer:'below'});
+  if(!cached)setTimeout(()=>{if(curScard!==el)return;tcache.add(key);fill(true);place(el,sentRect(s),{prefer:'below'});},420);
+}
+
+/* ---------- 其他小工具 ---------- */
+function flash(el){el.classList.remove('flash');void el.offsetWidth;el.classList.add('flash');setTimeout(()=>el.classList.remove('flash'),1950);}
+let toastT;
+function toast(msg,ms){
+  const t=$('#toast');t.textContent=msg;t.hidden=false;t.classList.remove('in');void t.offsetWidth;t.classList.add('in');
+  clearTimeout(toastT);toastT=setTimeout(()=>{t.classList.remove('in');setTimeout(()=>{if(!t.classList.contains('in'))t.hidden=true;},220);},ms||1700);
+}
+function copy(text){
+  try{navigator.clipboard.writeText(text).then(()=>toast('已复制'),()=>toast('浏览器不允许复制'));}catch(e){toast('浏览器不允许复制');}
+}
+let backT;
+function jumpTo(el,from){
+  if(!el)return;backPos=from;
+  restore(el,RM()==='scroll');
+  setTimeout(()=>flash(el),RM()==='scroll'?380:60);
+  if(from){const b=$('#backPill');b.hidden=false;clearTimeout(backT);backT=setTimeout(()=>b.hidden=true,7000);}
+}
+function isMarked(){const a=anchor();return !!a&&marks.some(m=>m.p==a.dataset.p&&m.s==a.dataset.s);}
+function toggleMark(){
+  const a=anchor();if(!a)return;
+  const i=marks.findIndex(m=>m.p==a.dataset.p&&m.s==a.dataset.s);
+  if(i>=0){marks.splice(i,1);toast('已删除书签');}
+  else{marks.unshift({p:+a.dataset.p,s:+a.dataset.s,text:PARAS[a.dataset.p][a.dataset.s][0].slice(0,90),at:Date.now()});toast('已添加书签');}
+  store.set('rp.marks',marks);updateProgress();
+}
+
+/* ---------- 面板：设置 / 目录 / 搜索 ---------- */
+function openSheet(kind,html,o){
+  o=o||{};closeSheet(true);closeOverlays();
+  const scrim=document.createElement('div');scrim.className='scrim'+(o.dim?' dim':'');
+  const el=document.createElement('div');el.className='sheet';el.dataset.kind=kind;el.dataset.side=o.side||'right';el.setAttribute('role','dialog');
+  el.innerHTML='<div class="sh-grip" aria-hidden="true"></div>'+html;
+  scrim.addEventListener('click',()=>closeSheet());
+  ov.append(scrim,el);curSheet={el,scrim};
+  requestAnimationFrame(()=>{scrim.classList.add('in');el.classList.add('in');});
+  return el;
+}
+function closeSheet(now){
+  if(!curSheet)return;const {el,scrim}=curSheet;curSheet=null;
+  if(now){el.remove();scrim.remove();return;}
+  el.classList.remove('in');scrim.classList.remove('in');setTimeout(()=>{el.remove();scrim.remove();},280);
+}
+const closeBtn='<button class="ib sm" data-close aria-label="关闭">'+IC.close+'</button>';
+const rng=(k,label,min,max,step)=>'<div class="rg"><span>'+label+'</span><input type="range" id="r-'+k+'" data-range="'+k+'" min="'+min+'" max="'+max+'" step="'+step+'" value="'+S[k]+'" aria-label="'+label+'"><output data-out="'+k+'">'+FMT[k](S[k])+'</output></div>';
+const tog=(k,label,sub)=>'<label class="tog"><span>'+label+(sub?'<small>'+sub+'</small>':'')+'</span><input type="checkbox" id="t-'+k+'" data-tog="'+k+'"'+(S[k]?' checked':'')+'><i></i></label>';
+function modeHTML(){
+  const L=landscape(),k=L?'modeL':'modeP',spread=L&&DW>=900;
+  return '<div class="lab">翻页方式 · '+(L?'横屏':'竖屏')+'</div><div class="seg">'+
+    '<button data-set="'+k+'" data-val="page">'+(spread?'双页':'左右翻页')+'</button><button data-set="'+k+'" data-val="scroll">上下滚动</button></div>'+
+    '<p class="note">横屏和竖屏分开记住；横屏宽屏默认像 Apple Books 一样左右两页。</p>';
+}
+function typeHTML(){
+  return '<div class="sizerow"><button class="ib" data-step="-1" aria-label="缩小字号"><span style="font:600 14px/1 Georgia,serif">A</span></button>'+
+    '<input type="range" id="r-size" data-range="size" min="14" max="30" step="1" value="'+S.size+'" aria-label="字号">'+
+    '<button class="ib" data-step="1" aria-label="放大字号"><span style="font:600 22px/1 Georgia,serif">A</span></button><output data-out="size">'+FMT.size(S.size)+'</output></div>'+
+    '<div class="lab">主题</div><div class="themes">'+THEMES.map(t=>'<button class="th" data-set="theme" data-val="'+t.id+'" style="--tb:'+t.bg+';--tf:'+t.fg+'"><span class="th-sw">Aa</span>'+t.name+'</button>').join('')+'</div>'+
+    tog('follow','跟随系统深色模式','系统切到深色时，自动换成夜间主题')+
+    '<div class="lab">字体</div><div class="fonts">'+Object.keys(FONTS).map(k=>'<button class="fo" data-set="font" data-val="'+k+'"><span class="fo-a" style="font-family:'+FONTS[k].stack.replace(/"/g,"'")+'">Ag</span><span class="fo-n">'+FONTS[k].name+(FONTS[k].tag?'<small>'+FONTS[k].tag+'</small>':'')+'</span></button>').join('')+'</div>'+
+    '<p class="note">和 Apple Books 同一套字体。苹果字体只在 Mac、iPhone、iPad 上显示得出来，其他设备会用相近字体代替；安卓 App 默认用 Literata。</p>'+
+    '<div class="tog2">'+tog('bold','粗体')+tog('justify','两端对齐')+'</div>'+
+    rng('lh','行距',1.2,2.2,0.05)+rng('ls','字间距',-0.02,0.08,0.01)+rng('ps','段间距',0,1.2,0.1)+rng('mg','页边距',12,56,2)+
+    modeHTML()+
+    '<button class="reset" data-reset="type">恢复默认排版</button>';
+}
+function demoHTML(){
+  const e=entry('tomorrow');
+  const top=S.tier==='full'
+    ?'<div class="dm-card"><div><b>tomorrow</b> <span class="dm-ph">/'+esc(e.ph)+'/</span></div>'+e.groups.map(g=>'<div class="dm-row"><span class="pos">'+g.pos+'</span>'+esc(g.gl.join('；'))+'</div>').join('')+'<div class="dm-en">'+esc(e.en)+'</div></div>'
+    :'<span class="dm-tip">'+esc(S.tier==='min'?minText(e):briefText(e))+'</span>';
+  return '<div class="dm">'+top+'<p class="dm-s">See you <span class="dm-w">tomorrow</span> morning.</p></div>';
+}
+function glossHTML(){
+  return '<div class="lab">点单词后显示</div><div class="seg"><button data-set="tier" data-val="min">极简</button><button data-set="tier" data-val="brief">简洁</button><button data-set="tier" data-val="full">完整</button></div>'+
+    '<div id="demo">'+demoHTML()+'</div>'+
+    '<p class="note">极简和简洁点一下气泡，就会展开成完整卡片。</p>'+
+    '<div class="lab">极简档显示几个意思</div><div class="seg"><button data-set="n" data-val="1">1 个</button><button data-set="n" data-val="2">2 个</button><button data-set="n" data-val="3">3 个</button></div>'+
+    rng('bfs','气泡字号',13,20,1)+
+    tog('annot','行间注音','点过的词在上方行间留一行小字释义，适合精读；再点一次打开完整卡片')+
+    '<div class="lab">词典顺序</div><ol class="dicts"><li><span class="grip">≡</span>ECDICT 英汉<small>已下载</small></li><li><span class="grip">≡</span>Wiktionary 英英<small>已下载</small></li><li class="off"><span class="grip">≡</span>牛津高阶（MDX）<small>未导入</small></li></ol>'+
+    '<p class="note">原型里顺序不能拖动；App 里可拖动排序。</p>'+
+    '<button class="reset" data-reset="gloss">恢复默认释义设置</button>';
+}
+function openSettings(){
+  const el=openSheet('settings','<div class="sh-top"><div class="seg" role="tablist"><button data-tab="type">排版</button><button data-tab="gloss">释义</button></div>'+closeBtn+'</div><div class="sh-body">'+(sheetTab==='type'?typeHTML():glossHTML())+'</div>',{side:'right'});
+  el.addEventListener('click',ev=>{
+    const t=ev.target.closest('button');if(!t)return;
+    if(t.hasAttribute('data-close')){closeSheet();return;}
+    if(t.dataset.tab){sheetTab=t.dataset.tab;$('.sh-body',el).innerHTML=sheetTab==='type'?typeHTML():glossHTML();refreshSheet();return;}
+    if(t.dataset.set){
+      const k=t.dataset.set;let v=t.dataset.val;if(typeof DEF[k]==='number')v=Number(v);
+      if(k==='theme'&&S.follow&&sysDark()){S.follow=false;toast('已关闭「跟随系统深色模式」');}
+      S[k]=v;apply();return;
+    }
+    if(t.dataset.step){S.size=clamp(S.size+Number(t.dataset.step),14,30);apply();return;}
+    if(t.dataset.reset){KEYS[t.dataset.reset].forEach(k=>S[k]=DEF[k]);apply();return;}
+  });
+  let rafId;
+  el.addEventListener('input',ev=>{const t=ev.target;if(!t.dataset.range)return;S[t.dataset.range]=Number(t.value);cancelAnimationFrame(rafId);rafId=requestAnimationFrame(apply);});
+  el.addEventListener('change',ev=>{const t=ev.target;if(!t.dataset.tog)return;S[t.dataset.tog]=t.checked;apply();});
+  refreshSheet();
+}
+function refreshSheet(){
+  if(!curSheet||curSheet.el.dataset.kind!=='settings')return;const el=curSheet.el;
+  $$('[data-tab]',el).forEach(b=>b.classList.toggle('on',b.dataset.tab===sheetTab));
+  $$('[data-set]',el).forEach(b=>b.classList.toggle('on',String(S[b.dataset.set])===b.dataset.val));
+  $$('[data-range]',el).forEach(r=>{const k=r.dataset.range;if(document.activeElement!==r)r.value=S[k];const o=el.querySelector('[data-out="'+k+'"]');if(o)o.textContent=FMT[k](S[k]);});
+  $$('[data-tog]',el).forEach(c=>c.checked=!!S[c.dataset.tog]);
+  const d=el.querySelector('#demo');if(d)d.innerHTML=demoHTML();
+}
+function openToc(){
+  const el=openSheet('toc','<div class="sh-top"><div class="seg"><button data-tt="toc">目录</button><button data-tt="marks">书签</button></div>'+closeBtn+'</div><div class="sh-body" id="tocBody"></div>',{dim:true,side:'left'});
+  const render=t=>{
+    $$('[data-tt]',el).forEach(b=>b.classList.toggle('on',b.dataset.tt===t));
+    const body=$('#tocBody',el);
+    if(t==='toc'){
+      let li='';for(let i=1;i<=61;i++)li+='<li><button data-ch="'+i+'"'+(i===1?' class="cur"':'')+'><span>Chapter '+i+'</span><small>'+(i===1?'正在读':'')+'</small></button></li>';
+      body.innerHTML='<div class="toc-book"><b>Pride and Prejudice</b><span>Jane Austen · 61 章</span></div><ol class="toc">'+li+'</ol>';
+    }else{
+      body.innerHTML=marks.length?'<ul class="marks">'+marks.map((m,i)=>'<li><button data-mk="'+i+'"><span>'+esc(m.text)+'…</span><small>第 1 章 · '+fmtDate(m.at)+'</small></button></li>').join('')+'</ul>'
+        :'<p class="empty">还没有书签。<br>点工具栏上的书签图标，把当前位置加进来。</p>';
+    }
+  };
+  el.addEventListener('click',ev=>{
+    const t=ev.target.closest('button');if(!t)return;
+    if(t.hasAttribute('data-close'))return closeSheet();
+    if(t.dataset.tt)return render(t.dataset.tt);
+    if(t.dataset.ch){if(t.dataset.ch!=='1'){toast('原型只包含第 1 章');return;}const a=anchor();closeSheet();jumpTo($('.chap',flow),a);return;}
+    if(t.dataset.mk){const m=marks[+t.dataset.mk];const a=anchor();closeSheet();jumpTo(sentEl(m.p,m.s),a);}
+  });
+  render('toc');
+}
+function snip(t,i,len){const a=Math.max(0,i-40),b=Math.min(t.length,i+len+70);return (a>0?'…':'')+esc(t.slice(a,i))+'<mark>'+esc(t.slice(i,i+len))+'</mark>'+esc(t.slice(i+len,b))+(b<t.length?'…':'');}
+function openSearch(){
+  const el=openSheet('search','<div class="sh-top"><div class="sfield">'+IC.search+'<input id="sq" type="search" placeholder="在本书中搜索" autocomplete="off" aria-label="搜索内容"></div>'+closeBtn+'</div><div class="sh-body" id="sres"><p class="empty">输入单词，比如 fortune 或 visit</p></div>',{dim:true,side:'right'});
+  const q=$('#sq',el);setTimeout(()=>{try{q.focus({preventScroll:true});}catch(e){}},260);
+  q.addEventListener('input',()=>{
+    const v=q.value.trim(),box=$('#sres',el);
+    if(v.length<2){box.innerHTML='<p class="empty">输入至少两个字母</p>';return;}
+    const re=new RegExp(escRe(v),'i'),hits=[];
+    PARAS.forEach((p,pi)=>p.forEach(([en],si)=>{const m=en.match(re);if(m)hits.push({pi,si,en,i:m.index,len:m[0].length});}));
+    box.innerHTML=hits.length?'<div class="s-count">第 1 章中找到 '+hits.length+' 处</div><ul class="sres">'+hits.map(h=>'<li><button data-p="'+h.pi+'" data-s="'+h.si+'">'+snip(h.en,h.i,h.len)+'</button></li>').join('')+'</ul>'
+      :'<p class="empty">这一章里没有找到</p>';
+  });
+  el.addEventListener('click',ev=>{
+    const t=ev.target.closest('button');if(!t)return;
+    if(t.hasAttribute('data-close'))return closeSheet();
+    if(t.dataset.p){const a=anchor();closeSheet();jumpTo(sentEl(t.dataset.p,t.dataset.s),a);}
+  });
+}
+
+/* ---------- 生词本 ---------- */
+function renderVocab(){
+  const q=($('#vq').value||'').trim().toLowerCase();
+  const list=vocab.filter(v=>{if(!q)return true;const e=entry(v.word);return v.word.includes(q)||(e&&flat(e).join('').includes(q));});
+  $('#vcount').textContent=vocab.length+' 个词 · 点一条可跳回原文';
+  $('#vlist').innerHTML=list.length?list.map(v=>{
+    const e=entry(v.word),sent=(PARAS[v.p]&&PARAS[v.p][v.s])?PARAS[v.p][v.s][0]:'';
+    return '<li class="vi"><button class="vi-main" data-open="'+v.id+'"><div class="vi-top"><span class="vi-w">'+esc(v.word)+'</span><span class="vi-g">'+esc(e?flat(e).slice(0,2).join('；'):'')+'</span>'+(v.ex?'<span class="tag">示例</span>':'')+'</div>'+
+      '<p class="vi-s">'+ctxHTML(sent,v.surface)+'</p><div class="vi-m">Pride and Prejudice · '+fmtDate(v.at)+'</div></button>'+
+      '<button class="ib sm vi-del" data-del="'+v.id+'" aria-label="删除 '+esc(v.word)+'">'+IC.close+'</button></li>';
+  }).join(''):'<li class="empty">'+(q?'没有匹配的词':'还没有生词。阅读时打开单词卡片，点星标加入。')+'</li>';
+}
+
+/* ---------- 事件 ---------- */
+let down=null,lpTimer=null,lpFired=false,swiped=false;
+rbody.addEventListener('pointerdown',e=>{
+  if(e.button>0)return;
+  down={x:e.clientX,y:e.clientY};lpFired=false;swiped=false;
+  const s=e.target.closest('.s');
+  if(s)lpTimer=setTimeout(()=>{lpFired=true;selectSentence(s);try{navigator.vibrate&&navigator.vibrate(8);}catch(_){}},450);
+});
+rbody.addEventListener('pointermove',e=>{if(down&&Math.hypot(e.clientX-down.x,e.clientY-down.y)>10)clearTimeout(lpTimer);});
+rbody.addEventListener('pointerup',e=>{
+  clearTimeout(lpTimer);
+  if(down&&RM()==='page'&&!lpFired){const dx=e.clientX-down.x,dy=e.clientY-down.y;if(Math.abs(dx)>45&&Math.abs(dx)>Math.abs(dy)*1.3){swiped=true;goPage(page+(dx<0?1:-1));}}
+  down=null;
+});
+rbody.addEventListener('pointercancel',()=>{clearTimeout(lpTimer);down=null;});
+rbody.addEventListener('contextmenu',e=>e.preventDefault());
+rbody.addEventListener('click',e=>{
+  if(lpFired||swiped){lpFired=false;swiped=false;return;}
+  const w=e.target.closest('.w');
+  if(w){showWord(w);return;}
+  if(hasOverlay()){closeOverlays();return;}
+  setChrome(!reader.classList.contains('chrome'));
+});
+rbody.addEventListener('scroll',()=>{
+  if(RM()!=='scroll')return;
+  if(hasOverlay())closeOverlays();
+  if(!sliding&&reader.classList.contains('chrome'))setChrome(false);
+  updateProgress();savePosSoon();
+},{passive:true});
+$('#edgeL').addEventListener('click',()=>{if(hasOverlay())return closeOverlays();goPage(page-1);});
+$('#edgeR').addEventListener('click',()=>{if(hasOverlay())return closeOverlays();goPage(page+1);});
+prog.addEventListener('pointerdown',()=>{sliding=true;});
+window.addEventListener('pointerup',()=>{sliding=false;});
+prog.addEventListener('input',()=>{
+  const f=prog.value/1000;
+  if(RM()==='page')goPage(Math.round(f*(pages-1)),true);
+  else rbody.scrollTop=f*(rbody.scrollHeight-rbody.clientHeight);
+});
+$('#bBack').addEventListener('click',()=>{savePos();showView('shelf');});
+$('#bToc').addEventListener('click',openToc);
+$('#bSearch').addEventListener('click',openSearch);
+$('#bMark').addEventListener('click',toggleMark);
+$('#bAa').addEventListener('click',openSettings);
+$('#backPill').addEventListener('click',()=>{$('#backPill').hidden=true;if(backPos){const p=backPos;backPos=null;restore(p,RM()==='scroll');}});
+$('#vq').addEventListener('input',renderVocab);
+$$('.devs button').forEach(b=>b.addEventListener('click',()=>setDevice(b.dataset.dev)));
+screen.addEventListener('click',e=>{
+  const t=e.target.closest('[data-toast],[data-book],[data-view],[data-open],[data-del]');if(!t||t.closest('.ov'))return;
+  if(t.hasAttribute('data-toast'))return toast(t.dataset.toast,2400);
+  if(t.dataset.book){if(t.dataset.book==='pp')openReader();else toast('原型里只有 Pride and Prejudice 可以打开');return;}
+  if(t.dataset.view)return showView(t.dataset.view);
+  if(t.dataset.open){const v=vocab.find(x=>x.id===t.dataset.open);if(v)openReader({p:v.p,s:v.s});return;}
+  if(t.dataset.del){vocab=vocab.filter(x=>x.id!==t.dataset.del);store.set('rp.vocab',vocab);renderVocab();toast('已删除');}
+});
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape'){if(curSheet)closeSheet();else closeOverlays();return;}
+  if(!readerOpen||curSheet||RM()!=='page'||/INPUT|TEXTAREA/.test(document.activeElement&&document.activeElement.tagName))return;
+  if(e.key==='ArrowRight')goPage(page+1);
+  if(e.key==='ArrowLeft')goPage(page-1);
+});
+let rsT;window.addEventListener('resize',()=>{clearTimeout(rsT);rsT=setTimeout(relayout,120);});
+const onSys=()=>apply();
+if(mq.addEventListener)mq.addEventListener('change',onSys);else if(mq.addListener)mq.addListener(onSys);
+new MutationObserver(onSys).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+
+/* ---------- 启动 ---------- */
+$$('[data-ic]').forEach(el=>{el.innerHTML=IC[el.dataset.ic]||'';});
+buildFlow();
+dev=store.get('rp.dev',window.innerWidth<560?'fit':'iphone');if(!DEVICES[dev])dev='iphone';
+$$('.devs button').forEach(b=>b.classList.toggle('on',b.dataset.dev===dev));
+fit();apply();showView('shelf');
+if(document.fonts&&document.fonts.ready)document.fonts.ready.then(()=>{if(readerOpen){const a=anchor();layout();if(a&&(RM()==='page'||rbody.scrollTop>4))restore(a);}});
+})();
+</script>

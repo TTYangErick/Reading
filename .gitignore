@@ -1,0 +1,10 @@
+.DS_Store
+__pycache__/
+*.pyc
+.venv/
+dict_builder/data/
+app/assets/dictionaries/*.sqlite*
+artifacts/
+.env
+.env.*
+!.env.example

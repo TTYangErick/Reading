@@ -1,0 +1,9 @@
+#!/bin/sh
+set -eu
+READING_PROXY_URL=${READING_PROXY_URL-http://127.0.0.1:7897}
+if [ -n "$READING_PROXY_URL" ]; then
+  export HTTP_PROXY="$READING_PROXY_URL" HTTPS_PROXY="$READING_PROXY_URL"
+  export http_proxy="$READING_PROXY_URL" https_proxy="$READING_PROXY_URL"
+fi
+export NO_PROXY=localhost,127.0.0.1,::1 no_proxy=localhost,127.0.0.1,::1
+exec flutter "$@"

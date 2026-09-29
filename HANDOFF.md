@@ -1,0 +1,36 @@
+# Reading 交接与执行状态
+
+更新：2026-09-30
+
+## 已确认
+
+- 项目在 `/Users/tty/Desktop/Coding/Reading`；原型在 `prototype/reader.html`。
+- 历史会话：`~/.claude/projects/-Users-tty-Desktop-Coding/e2bedabc-fa2a-465f-a15f-b8a641e84793.jsonl`；相关记忆位于同目录的 memory/。
+- 原计划存档 `docs/original-plan.md`，当前执行范围 `PLAN.md`。
+- 原型为 v2，标题仍写 v1；297 词条，847 次示例单词全部命中；语法及抽样词形还原检查通过。
+- Flutter 3.47.5 / Dart 3.13.4、Xcode 27.0、CocoaPods 1.17.0、Android SDK 已就绪。
+- 2026-09-30 指定 HTTP(S)_PROXY 和 NO_PROXY 后，flutter doctor 显示 No issues found。
+- Xcode 模拟器窗口是 DeviceHub；现有 iPhone 18 Pro 与 Android Reader_Phone 模拟器。
+- 旧临时 hello_check 仅 Flutter 示例，不是 Reading App；iOS/安卓示例曾构建运行成功。
+- Reading 开始接手时无 Git 仓库，仅原型和空 test.py；没有丢失的正式业务代码。
+
+## 当前工作
+
+阶段 2 开发中；功能与验收结果将在交付前更新。
+
+## 环境
+
+使用 `./scripts/flutterw`。本地代理 `127.0.0.1:7897` 须可用；NO_PROXY 包含 localhost,127.0.0.1,::1。Gradle 用户配置已单独使用相同代理。
+
+## 未关闭
+
+- 用户可测试的 iPhone/iPad/Android 型号、系统版本尚未提供；不阻塞阶段 2。
+- 原型 UI 自动化的页面状态与截图不一致，未声称通过双页/气泡视觉验收。
+- 系统翻译、语言模型下载、Wiktionary、MDX、PDF 未实现；在后续阶段处理。
+- 教材范围已确认：文字、图片、简单表格。
+
+## 参考
+
+- Apple Translation: https://developer.apple.com/documentation/translation/translating-text-within-your-app
+- ML Kit 模型安装方式: https://developers.google.com/ml-kit/tips/installation-paths
+- ECDICT: https://github.com/skywind3000/ECDICT
