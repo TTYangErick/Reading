@@ -110,6 +110,7 @@ class _ReaderSettingsState extends State<ReaderSettings> {
             ),
           const SizedBox(height: 12),
           DropdownButtonFormField<String>(
+            isExpanded: true,
             key: ValueKey('font-${style.font}'),
             initialValue: fonts.containsKey(style.font)
                 ? style.font

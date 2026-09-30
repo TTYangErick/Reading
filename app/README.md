@@ -19,7 +19,7 @@ READING_PROXY_URL='' ../scripts/flutterw run --no-pub
 
 `scripts/flutterw` 默认只给子进程配置本地代理 `127.0.0.1:7897`。可通过 `READING_PROXY_URL` 覆盖；设为空字符串可关闭。它不改变系统网络设置。
 
-本机实测：下载依赖时需代理；安卓 VM Service 调试连接在带代理时会反复断开。因此先正常 `pub get`，再用 `READING_PROXY_URL=''` 运行或执行设备集成测试。空值会清除该子进程的大小写 HTTP/HTTPS/ALL_PROXY。Gradle 保留已有的下载代理配置。
+本机实测：下载依赖时需代理；安卓调试曾有间歇断连，代理并未被证实为唯一原因。最终双平台集成测试采用先正常 `pub get`，再用 `READING_PROXY_URL=''` 运行或执行设备集成测试的方式通过。空值会清除该子进程的大小写 HTTP/HTTPS/ALL_PROXY。Gradle 保留已有的下载代理配置。
 
 ## 验证
 

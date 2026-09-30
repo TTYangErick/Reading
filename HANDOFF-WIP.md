@@ -1,10 +1,10 @@
-# Reading 临时交接快照（未完成验收）
+# Reading 临时交接快照（自动化通过，待体验验收）
 
 更新：2026-09-30。用户要求在额度用尽前保存，并总结当前成果。
 
 ## 第一结论
 
-不要从头开始。正式 Flutter App 和真实词典已经写好，阶段 2 主流程曾分别在 iPhone 与安卓模拟器通过集成测试；后来新增的「点击空白进入沉浸模式」断言在两端失败，当前最新版集成测试不是全绿。阶段 2 尚未全部验收；阶段 3 尚未开始。
+不要从头开始。正式 Flutter App 和真实词典已经写好。此前阻塞的「长按复制后点击空白进入沉浸模式」回归已修复；最终版本在 iPhone 与安卓模拟器均通过完整集成测试，9 项单元/组件测试和静态分析也通过。当前进入阶段 2 体验验收；原生文件选择导入、系统栏实际外观与部分视觉项目还未验收，不能把阶段 2 标为全部验收完成。阶段 3 尚未开始。
 
 ## 项目与基线
 
@@ -28,31 +28,29 @@
 ## 已经得到的验证结果
 
 - `python3 -m unittest discover -s tests -v`：2 项通过（生成器释义顺序、schema、词形、manifest）。
-- `flutter test --reporter expanded`：8 项通过（UTF-8/BOM/GBK、章节/空文件、英文范围/句子、样式、数据库真实关闭重开、完整 ECDICT、三档/展开/未命中、窄屏长气泡/角落几何）。最后一次 8/8 通过。
-- `flutter analyze`：最后一次 No issues found。之后仅添加了沉浸测试的诊断输出，需要收尾再跑一次。
+- `flutter test --reporter expanded`：9 项通过（UTF-8/BOM/GBK、章节/空文件、英文范围/句子、样式、数据库真实关闭重开、完整 ECDICT、三档/展开/未命中、窄屏长气泡/角落几何、长按松开再弹复制面板、空白切换工具栏）。最新共 9/9 通过。
+- `flutter analyze`：最终代码 No issues found（5.7s）。临时手势/区域诊断输出已移除。
 - iOS 模拟器 debug 构建成功；Android debug APK 构建成功。
-- **新增沉浸断言之前**：主集成流程在 iPhone 18 Pro 和 Android API 36 都有 `All tests passed`：粘贴 → 真词典查词 → 展开 → 复制句子 → 即时设置 → 进度 51% → 销毁并重建 App 和数据库 → 恢复段落/粗体 → 书名修改/搜索/删除。
-- 查词是本地 SQLite；1000 次 debug 模拟器查询典型 p95：iOS 0.159 ms，Android 0.179 ms；最大值分别曾约 9.8 ms/17.9 ms。因此不能把每次 `<5ms` 目标宣称已全部达成，也不能用模拟器代替真机性能验收。
+- **最终含沉浸和原生亮屏断言的集成测试**：iPhone 18 Pro（20s）和 Android API 36（25s）均 `All tests passed`：粘贴 → 真词典查词 → 展开 → 复制句子 → 即时设置 → 空白隐藏/恢复工具栏 → 进度 51% → 销毁并重建 App 和数据库 → 恢复段落/粗体 → 书名修改/搜索/删除。另已通过 `WakelockPlus.enabled` 核验阅读时原生亮屏开启、返回书架关闭。
+- 查词是本地 SQLite；最终 1000 次 debug 模拟器查询：iOS p95 0.168 ms / max 9.050 ms；Android p95 1.014 ms / max 51.144 ms。宿主 p95 0.134 ms / max 0.536 ms。机器负载/调试会造成波动，不能把每次 `<5ms` 目标宣称已全部达成，也不能用模拟器代替真机性能验收。
 - CUA 在 iOS 已实际看到书架、文字封面、正文排版、系统 TXT 文件选择器（空 Recents）。字体/排版基本可显示。**没有完成从原生选择器选一份实际 TXT 的端到端验收，也没有完成气泡截图视觉验收**。不要把解析测试等同于原生文件选择测试。
 
-## 当前最高优先级问题：沉浸空白点击
+## 本轮解决的阻塞：沉浸空白点击
 
-位置：`app/lib/reader/reader.dart` 的 `toggleChrome()`，约第 122 行；`app/integration_test/reading_flow_test.dart` 约第 127 行起新增断言。
+- 失败可追溯到先前的长按复制，设置关闭只是暴露问题的位置。命中测试证实点击到了阅读区，手势日志只出现 VerticalDrag，没有外层 Tap 参与；并非设置覆盖层或左右屏幕边缘。
+- `ReaderParagraph` 原先在 `onLongPressStart` 直接 push 复制面板；当前在开始时记录句子位置，`onLongPressEnd` 松开后才打开，取消时清空位置。Flutter Navigator 在打开路由时会取消尚未结束的指针；此改法避免面板出现时仍有按压中的手势。
+- 同样的完整集成测试由失败变为双平台通过，原失败断言保留。尚未证明旧问题在正常发行应用中一定出现；不要将测试绑定的问题过度宣传为所有用户设备的故障。
+- 新增 `app/test/reader_interaction_test.dart`，覆盖真实词典点词/展开/关闭、长按松开才弹面板、复制后和字号/粗体设置后的空白切换。
+- 小范围测试发现字体下拉菜单在窄屏测试字体下溢出 41px，已通过 `isExpanded: true` 修复。
+- 日志 `artifacts/immersive-diagnostic.log` 为本机诊断记录（Git 忽略），最终版本移除了这些诊断输出。
 
-- 设置关闭后，没有 WordBubble。
-- 测试读取 reader-text 的矩形：`Rect.fromLTRB(0.0, 62.0, 402.0, 840.0)`。
-- 点左空白 `(6, 451)` 和右空白 `(390, 451)`，两者都未隐藏 reader-settings 工具栏。
-- 在 `toggleChrome` 加了临时 `debugPrint('Reader toggle: ...')`，失败的测试日志里没有该输出，说明手势没有进入此方法。**不能简单断言是系统返回边缘手势问题：右侧也失败。**
-- 两端同样失败，优先检查 Flutter 层的 hit test/覆盖层/手势事件路径。字号/粗体/进度等此前能操作。
-- 目前仍保留这两个诊断打印（Reader toggle、Reader area）。不要把失败断言删掉来声称通过。
+## 精确下一步
 
-**精确下一步：**
-1. 在这个断言前输出 `tester.hitTestOnBinding(margin)`；这是本地 SDK `flutter_test` 已确认存在的公开方法。检查哪个 RenderObject/ModalBarrier/PointerListener 截获点击，再定位覆盖层或 GestureDetector。也可先写一个含 ReaderPage 的针对性 widget 测试（需 mock 平台通道）缩短回归周期。
-2. 修好后验证空白点击隐藏/显示工具栏；确认系统栏也按预期变化。Android 原生实现见 `MainActivity.kt`；Dart 接口 `lib/core/reader_system_ui.dart`。
-3. 删除临时诊断打印，保留回归断言；顺序运行两个模拟器集成测试。
-4. 核验 Wakelock 原生状态、真实文件选择导入（UTF-8/GBK）、实际气泡位置/三主题等尚未人工核验的细节。原型双页视觉不阻塞阶段 2，双页实际实现归阶段 3。
-5. 全部通过后更新 HANDOFF/验收记录，构建正常 `lib/main.dart` 应用并启动给用户体验。当前 APK 可能是 integration_test 入口，**不要直接把现存 app-debug.apk 当作最终体验包交付**。
-6. 用户体验阶段 2 后再进入 EPUB/翻页/双页/真实翻译等阶段 3，不改成长期 TXT-only。
+1. 两台模拟器已安装并启动正常 `lib/main.dart` 入口。后续直接打开 Reading 体验；不必重复集成测试或重装。只有代码变更才重跑相关检查。
+2. 通过 CUA 实际导入 UTF-8/GBK TXT 文件，核验系统文件选择器到书架的端到端路径；解析器和粘贴路径已经通过。当前 CUA 对 Device Hub 返回 `noWindowsAvailable`，这属于界面自动化受限，不是 Flutter 构建失败；不要用其他 UI 自动化技术绕过。
+3. 视觉核验词旁气泡在边缘、各主题/字体、沉浸系统状态栏的实际隐藏与恢复。自动化目前核验工具栏，不等同系统栏像素验收。
+4. 让用户体验阶段 2；可提供 iPhone/iPad/安卓型号和系统版本，安排真机安装。无需用户重装环境、寻找旧源码或做工程调试。
+5. 用户体验验收阶段 2 后继续 EPUB/翻页/必做 iPad 双页/真实翻译等阶段 3，不能长期停在 TXT-only。
 
 ## 已修的问题
 
@@ -95,9 +93,12 @@ READING_PROXY_URL='' ../scripts/flutterw run -d emulator-5554 --no-pub --no-resi
 
 ## 最后一次运行与遗留文件
 
-- 最后 iOS 集成测试 exec session `89857` 已失败退出，原因是上述右侧空白点击断言。
-- 挂起的安卓测试 PID `96047` 已定向 SIGTERM；session `44775` 返回 `No tests ran` 后退出。不要重复杀未知进程。
-- 旧安卓详细连接失败日志在 `artifacts/android-integration.log`（被 Git 忽略，含本地调试 URL）。
-- 最新 8 项单元/组件测试和 analyze 的 exec sessions 已成功结束。
-- `HANDOFF.md` 将链接本文件；续做先读本文件，不要把旧“阶段 2 开发中”当成没有源码。
-- 当前没有真实用户导入书籍被要求迁移；模拟器里只有我们创建的示例/临时测试数据。别把后续用户数据当作可删除的测试数据。
+- 最终 iOS 集成测试 session `55742` 成功退出（20s）；安卓 session `59026` 成功退出（25s）。旧失败测试均已结束。
+- 最新全部 9 项单元/组件测试 session `25468`、analyze session `3102` 成功结束。
+- 正常 `lib/main.dart` 应用安装启动：iOS session `38441` 与 Android session `10248` 均成功退出。当前 `app/build/app/outputs/flutter-apk/app-debug.apk` 已重建为正常体验入口（debug），不是测试入口。两台模拟器都已启动 Reading。
+- 旧安卓详细连接失败日志在 `artifacts/android-integration.log`（Git 忽略，含本地调试 URL）。本轮最终安卓测试连接正常，历史间歇断连仍不能宣布永不复现。
+- CUA 本轮 `getApp('com.apple.dt.Devices')` 先返回 noWindowsAvailable，正常应用启动后再试为 timeoutReached；`cua.computer.launch_app` 在此 macOS 运行时不存在。不要继续调用这个不可用 API。
+- 用户最近询问有无需要其操作的困难。已告知没有必须用户处理的工程阻塞；真机型号/系统版本只影响后续安装，当前阶段由代理继续收尾。
+- 用户追加长期要求：每次接近使用额度、中断或切换上下文前保存此文件。已写入 `AGENTS.md`，重要节点也主动保存，避免无法预知额度而来不及记录。
+- `HANDOFF.md` 链接本文件；续做先读本文件，不要把旧记录当成没有源码。
+- 模拟器里目前仅代理创建的示例/临时测试数据。别把后续用户数据当作可删除的测试数据。

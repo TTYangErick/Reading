@@ -13,6 +13,7 @@ import 'package:reading_app/main.dart';
 import 'package:reading_app/reader/bubble.dart';
 import 'package:reading_app/reader/reader.dart';
 import 'package:reading_app/reader/style.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
@@ -87,6 +88,7 @@ void main() {
       );
       await tap(find.byKey(const ValueKey('save-paste')));
       expect(find.byType(ReaderPage), findsOneWidget);
+      expect(await WakelockPlus.enabled, isTrue);
       final id = (await database.books()).single.id;
       final rich = find.descendant(
         of: find.byKey(const ValueKey('paragraph-1')),
@@ -124,12 +126,11 @@ void main() {
         ReaderStyle.decode((await database.book(id))!.style).size,
         isNot(19),
       );
-      // Blank margins toggle both the reading toolbar and platform immersive mode.
+      // Blank margins hide and restore the toolbar after copying and changing settings.
       final readerArea = tester.getRect(
         find.byKey(const ValueKey('reader-text')),
       );
       final margin = Offset(readerArea.right - 12, readerArea.center.dy);
-      debugPrint('Reader area $readerArea, tap $margin, bubble=${find.byType(WordBubble).evaluate().length}');
       await tester.tapAt(margin);
       await pump();
       expect(find.byKey(const ValueKey('reader-settings')), findsNothing);
@@ -151,6 +152,7 @@ void main() {
       expect(savedPosition, greaterThan(15));
       await tap(find.byKey(const ValueKey('back-library')));
       expect(find.text('书架'), findsOneWidget);
+      expect(await WakelockPlus.enabled, isFalse);
       // Dispose the complete app and SQLite connection, then recreate both from disk.
       await tester.pumpWidget(const SizedBox.shrink());
       await pump();

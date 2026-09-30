@@ -120,7 +120,6 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
   }
 
   void toggleChrome() {
-    debugPrint('Reader toggle: chrome=$chrome selected=${selected?.text}');
     if (selected != null) {
       dismiss();
       return;
@@ -622,6 +621,7 @@ class ReaderParagraph extends StatefulWidget {
 
 class _ReaderParagraphState extends State<ReaderParagraph> {
   final textKey = GlobalKey();
+  int? sentenceOffset;
   RenderParagraph get paragraph =>
       textKey.currentContext!.findRenderObject()! as RenderParagraph;
   void tap(Offset global) {
@@ -664,13 +664,21 @@ class _ReaderParagraphState extends State<ReaderParagraph> {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTapUp: (details) => tap(details.globalPosition),
-      onLongPressStart: (details) => widget.onSentence(
-        paragraph
+      // Present the modal after release. Pushing a route while the press is
+      // active cancels the reader's pointer sequence on native platforms.
+      onLongPressStart: (details) {
+        sentenceOffset = paragraph
             .getPositionForOffset(
               paragraph.globalToLocal(details.globalPosition),
             )
-            .offset,
-      ),
+            .offset;
+      },
+      onLongPressEnd: (_) {
+        final offset = sentenceOffset;
+        sentenceOffset = null;
+        if (offset != null) widget.onSentence(offset);
+      },
+      onLongPressCancel: () => sentenceOffset = null,
       child: RichText(
         key: textKey,
         text: span,
