@@ -17,6 +17,13 @@ import 'bubble.dart';
 import 'settings.dart';
 import 'style.dart';
 
+typedef _ViewportGeometry = ({
+  Size size,
+  double pixelRatio,
+  EdgeInsets padding,
+  EdgeInsets insets,
+});
+
 class ReaderPage extends ConsumerStatefulWidget {
   final Book book;
   final ReaderStyle defaultStyle;
@@ -43,6 +50,7 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
   int? selectedParagraph;
   WordRange? selected;
   Rect? anchor;
+  _ViewportGeometry? lookupViewport;
   DictionaryEntry? entry;
   String? lookupMessage;
   Timer? saveTimer;
@@ -94,7 +102,19 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
 
   @override
   void didChangeMetrics() {
-    dismiss();
+    // iOS can report metrics again after a tap without changing the layout.
+    // Only invalidate the word's anchor when this view's geometry changes.
+    if (selected != null && lookupViewport != viewportGeometry) dismiss();
+  }
+
+  _ViewportGeometry get viewportGeometry {
+    final view = View.of(context);
+    return (
+      size: view.physicalSize,
+      pixelRatio: view.devicePixelRatio,
+      padding: EdgeInsets.fromViewPadding(view.padding, 1),
+      insets: EdgeInsets.fromViewPadding(view.viewInsets, 1),
+    );
   }
 
   @override
@@ -142,6 +162,7 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
   Future<void> lookup(int index, WordRange range, Rect globalRect) async {
     final box = stackKey.currentContext!.findRenderObject()! as RenderBox;
     final generation = ++lookupGeneration;
+    lookupViewport = viewportGeometry;
     setState(() {
       selectedParagraph = index;
       selected = range;

@@ -66,6 +66,22 @@ void main() {
       await tester.tapAt(render.localToGlobal(wordBox.center));
       await tester.pumpAndSettle();
       expect(find.text('明天；未来'), findsOneWidget);
+      // Native iOS reports unchanged metrics after ordinary taps. These must
+      // not dismiss the bubble; an actual viewport resize must clear its anchor.
+      for (var i = 0; i < 3; i++) {
+        tester.binding.handleMetricsChanged();
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+      await tester.pump(const Duration(seconds: 3));
+      expect(find.text('明天；未来'), findsOneWidget);
+      tester.view.physicalSize = const Size(430, 874);
+      await tester.pumpAndSettle();
+      expect(find.byType(WordBubble), findsNothing);
+      tester.view.physicalSize = const Size(402, 874);
+      await tester.pumpAndSettle();
+      await tester.tapAt(render.localToGlobal(wordBox.center));
+      await tester.pumpAndSettle();
+      expect(find.text('明天；未来'), findsOneWidget);
       await tester.tap(find.byType(WordBubble));
       await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('关闭释义'));

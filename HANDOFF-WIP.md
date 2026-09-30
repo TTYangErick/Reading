@@ -4,7 +4,26 @@
 
 ## 第一结论
 
-不要从头开始。正式 Flutter App 和真实词典已经写好。此前阻塞的「长按复制后点击空白进入沉浸模式」回归已修复；最终版本在 iPhone 与安卓模拟器均通过完整集成测试，9 项单元/组件测试和静态分析也通过。当前进入阶段 2 体验验收；原生文件选择导入、系统栏实际外观与部分视觉项目还未验收，不能把阶段 2 标为全部验收完成。阶段 3 尚未开始。
+不要从头开始。正式 Flutter App 和真实词典已经写好。此前「长按复制后空白点击」回归已修复，双平台集成测试通过。随后用户实测发现 iPhone 点词气泡闪现，现已定位修复并获用户确认。最新 17 项单元/组件测试及静态分析通过，双平台 debug 构建通过；本次气泡修复未重跑会卸载用户书架的设备集成测试。当前进入阶段 2 体验验收；原生文件选择导入、系统栏实际外观与部分视觉项目还未验收，不能把阶段 2 标为全部验收完成。阶段 3 尚未开始。
+
+## 最新完成节点：导入回归与 iPhone 气泡修复
+
+- 用户要求预留额度记录；额度曾从约 30% 降到 14%。上次直接 attach 因自动审批额度不足未执行，用户随后要求继续，本轮执行已恢复。
+- **用户发现并确认解决的故障**：iPhone 每次点词后约 30–60ms 释义消失。通过正常应用的原生日志，调用栈明确为 `_ReaderPageState.didChangeMetrics → dismiss`。原代码对任何屏幕参数通知无条件关闭；现捕获查词时的 size/DPR/padding/insets，仅实际几何变化才关闭。临时诊断代码已移除。
+- 用户在热更新后明确回复「现在正常了」。17 项完整测试通过；回归覆盖重复 metrics 通知和 3 秒停留不关闭、真实 resize 关闭旧锚点；静态分析通过。
+- **持久安装已完成**：正常 iOS debug 构建成功，`simctl install` 覆盖升级，重新启动 Reading PID `71858`。升级前后核对同一个书籍 ID，现有 1 本书保留。模拟器升级会更换数据容器 UUID，不能因旧路径消失就认定丢数据；需重新 `simctl get_app_container`。
+- Android 最新正常 debug APK 构建成功（38.3s），位于 `app/build/app/outputs/flutter-apk/app-debug.apk`。本次没有重装安卓模拟器，它仍是上次运行版本；以后体验安卓时先以正常入口更新。
+- **TXT 导入新增 8 项回归**：真实 UTF-8 BOM/GBK 文件走正式读取、compute 解析、SQLite、阅读页、返回书架；另测取消、空文件、NUL 内容、读失败、超过 20MB、选择器异常，以及失败后重试。替代了原生对话框，不能宣称原生文件选择 E2E 完成。
+- 样本 `app/test/fixtures/txt/`，说明含编码及校验值。人工验收表 `docs/phase-2-acceptance.md`。原生文件选择和部分视觉仍待核验。
+- 用户询问 EPUB 是否开始，已明确答复：**尚未开始，阶段 3 必做**，保留文字/图片/简单表格、最终翻页、必做 iPad 双页等原计划。
+- 所有本轮测试/构建/attach 会话均已结束。attach 用 `d` 分离，不用 `q` 终止用户应用。
+
+## 当前准确下一步（优先于下面历史记录）
+
+1. 不再重复重跑已通过检查。继续核验阶段 2 的实际系统文件选择导入和气泡/主题/系统栏外观。不要在用户已开始体验的模拟器执行 `flutter test -d`，它可能卸载 App。
+2. 打开 Reading 可直接继续阅读现有示例，修复已持久安装。收集用户对阶段 2 的体验反馈；可测试真机型号/版本仍未提供。
+3. 阶段 2 体验确认后正式进入阶段 3，优先 EPUB 文字/图片/简单表格与目录，之后按原计划推进翻页/双页/真实句子翻译；不改成长期 TXT-only。
+4. 继续重要节点立即更新本文件，保留额度用于记录、提交和明确剩余项。
 
 ## 项目与基线
 
@@ -28,11 +47,11 @@
 ## 已经得到的验证结果
 
 - `python3 -m unittest discover -s tests -v`：2 项通过（生成器释义顺序、schema、词形、manifest）。
-- `flutter test --reporter expanded`：9 项通过（UTF-8/BOM/GBK、章节/空文件、英文范围/句子、样式、数据库真实关闭重开、完整 ECDICT、三档/展开/未命中、窄屏长气泡/角落几何、长按松开再弹复制面板、空白切换工具栏）。最新共 9/9 通过。
-- `flutter analyze`：最终代码 No issues found（5.7s）。临时手势/区域诊断输出已移除。
+- `flutter test --reporter expanded`：17 项通过（UTF-8/BOM/GBK、章节/空文件、英文范围/句子、样式、数据库真实关闭重开、完整 ECDICT、三档/展开/未命中、窄屏长气泡/角落几何、长按松开再弹复制面板、空白切换工具栏、重复 metrics 保持气泡、真实文件导入和失败后重试）。最新共 17/17 通过。
+- `flutter analyze`：最终代码 No issues found（5.6s）。临时手势/区域诊断输出已移除。
 - iOS 模拟器 debug 构建成功；Android debug APK 构建成功。
-- **最终含沉浸和原生亮屏断言的集成测试**：iPhone 18 Pro（20s）和 Android API 36（25s）均 `All tests passed`：粘贴 → 真词典查词 → 展开 → 复制句子 → 即时设置 → 空白隐藏/恢复工具栏 → 进度 51% → 销毁并重建 App 和数据库 → 恢复段落/粗体 → 书名修改/搜索/删除。另已通过 `WakelockPlus.enabled` 核验阅读时原生亮屏开启、返回书架关闭。
-- 查词是本地 SQLite；最终 1000 次 debug 模拟器查询：iOS p95 0.168 ms / max 9.050 ms；Android p95 1.014 ms / max 51.144 ms。宿主 p95 0.134 ms / max 0.536 ms。机器负载/调试会造成波动，不能把每次 `<5ms` 目标宣称已全部达成，也不能用模拟器代替真机性能验收。
+- **前一检查点（501cafd）的沉浸和原生亮屏集成测试，本轮未在用户体验设备重跑**：iPhone 18 Pro（20s）和 Android API 36（25s）均 `All tests passed`：粘贴 → 真词典查词 → 展开 → 复制句子 → 即时设置 → 空白隐藏/恢复工具栏 → 进度 51% → 销毁并重建 App 和数据库 → 恢复段落/粗体 → 书名修改/搜索/删除。另已通过 `WakelockPlus.enabled` 核验阅读时原生亮屏开启、返回书架关闭。
+- 查词是本地 SQLite；最终 1000 次 debug 模拟器查询：iOS p95 0.168 ms / max 9.050 ms；Android p95 1.014 ms / max 51.144 ms。本轮宿主 p95 0.223 ms / max 0.593 ms。机器负载/调试会造成波动，不能把每次 `<5ms` 目标宣称已全部达成，也不能用模拟器代替真机性能验收。
 - CUA 在 iOS 已实际看到书架、文字封面、正文排版、系统 TXT 文件选择器（空 Recents）。字体/排版基本可显示。**没有完成从原生选择器选一份实际 TXT 的端到端验收，也没有完成气泡截图视觉验收**。不要把解析测试等同于原生文件选择测试。
 
 ## 本轮解决的阻塞：沉浸空白点击
@@ -46,7 +65,7 @@
 
 ## 精确下一步
 
-1. 两台模拟器已安装并启动正常 `lib/main.dart` 入口。后续直接打开 Reading 体验；不必重复集成测试或重装。只有代码变更才重跑相关检查。
+1. iPhone 已覆盖升级本轮气泡修复并启动，书架核对保留；安卓最新 APK 已构建但模拟器未更新，后续用正常入口升级。
 2. 通过 CUA 实际导入 UTF-8/GBK TXT 文件，核验系统文件选择器到书架的端到端路径；解析器和粘贴路径已经通过。当前 CUA 对 Device Hub 返回 `noWindowsAvailable`，这属于界面自动化受限，不是 Flutter 构建失败；不要用其他 UI 自动化技术绕过。
 3. 视觉核验词旁气泡在边缘、各主题/字体、沉浸系统状态栏的实际隐藏与恢复。自动化目前核验工具栏，不等同系统栏像素验收。
 4. 让用户体验阶段 2；可提供 iPhone/iPad/安卓型号和系统版本，安排真机安装。无需用户重装环境、寻找旧源码或做工程调试。
@@ -93,12 +112,12 @@ READING_PROXY_URL='' ../scripts/flutterw run -d emulator-5554 --no-pub --no-resi
 
 ## 最后一次运行与遗留文件
 
-- 最终 iOS 集成测试 session `55742` 成功退出（20s）；安卓 session `59026` 成功退出（25s）。旧失败测试均已结束。
-- 最新全部 9 项单元/组件测试 session `25468`、analyze session `3102` 成功结束。
-- 正常 `lib/main.dart` 应用安装启动：iOS session `38441` 与 Android session `10248` 均成功退出。当前 `app/build/app/outputs/flutter-apk/app-debug.apk` 已重建为正常体验入口（debug），不是测试入口。两台模拟器都已启动 Reading。
-- 旧安卓详细连接失败日志在 `artifacts/android-integration.log`（Git 忽略，含本地调试 URL）。本轮最终安卓测试连接正常，历史间歇断连仍不能宣布永不复现。
-- CUA 本轮 `getApp('com.apple.dt.Devices')` 先返回 noWindowsAvailable，正常应用启动后再试为 timeoutReached；`cua.computer.launch_app` 在此 macOS 运行时不存在。不要继续调用这个不可用 API。
-- 用户最近询问有无需要其操作的困难。已告知没有必须用户处理的工程阻塞；真机型号/系统版本只影响后续安装，当前阶段由代理继续收尾。
-- 用户追加长期要求：每次接近使用额度、中断或切换上下文前保存此文件。已写入 `AGENTS.md`，重要节点也主动保存，避免无法预知额度而来不及记录。
-- `HANDOFF.md` 链接本文件；续做先读本文件，不要把旧记录当成没有源码。
-- 模拟器里目前仅代理创建的示例/临时测试数据。别把后续用户数据当作可删除的测试数据。
+- 17 项测试 session `45482` 通过；目标手势回归 `27321` 通过；analyze `48669` 通过。
+- iOS build `90461` 成功；覆盖安装 `64836` 成功；正常应用新进程 `71858`。升级后的应用数据根目录需通过 `simctl get_app_container` 动态查询。
+- Android build `19163` 成功；未安装到当前安卓模拟器，不要误称已更新。
+- attach `15934` 已用 `d` 分离结束。直接依赖 mDNS 的 attach 曾挂起；可从 `simctl spawn <ID> log show --last 15m --predicate 'process == "Runner" AND eventMessage CONTAINS "VM service"'` 找当前 VM URL，再 `READING_PROXY_URL='' ../scripts/flutterw attach -d <ID> --debug-url <URL>`。URL 重启会变，勿复用历史端口。
+- attach 的控制台没有转发本轮 debugPrint；实际诊断从 iOS 原生日志读取（查询 Runner + 调用栈方法名）。别因 attach 输出空白就断言用户没有点击。
+- 两个 Runner 进程可能同时存在：旧 `dev.reader.helloCheck` 和正式 `dev.reading.readingApp`，需按 bundle identifier 核对。勿杀未知进程。
+- CUA 当前已恢复读取 Device Hub 窗口；先前间歇超时/noWindowsAvailable 仍需留意。不要用不可用的 macOS `cua.computer.launch_app`。
+- 本轮用户已经开始体验 iPhone，后续按有用户数据的环境对待；不再把模拟器视为可随意清空。
+- 最新阶段验收表见 `docs/phase-2-acceptance.md`，样本目录说明见 `app/test/fixtures/txt/README.md`。

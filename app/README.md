@@ -49,3 +49,5 @@ READING_PROXY_URL='' ../scripts/flutterw test integration_test/reading_flow_test
 数据仅保存在 App 的 Application Support 目录。卸载 App 会清除本地书架；跨设备备份在阶段 3 实施。
 
 当前 TXT 单文件上限 20 MB。阅读位置精确到段落。滚动阅读是阶段 2 的中间形态；EPUB、翻页、iPad 双页、词汇本和翻译按阶段 3 继续完成。
+
+TXT 真实文件与错误重试回归：`test/file_import_test.dart`（替代原生选择对话框）；样本在 `test/fixtures/txt/`。原生操作验收与未关闭项见 [阶段 2 验收表](../docs/phase-2-acceptance.md)。
