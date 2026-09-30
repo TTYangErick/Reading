@@ -1,29 +1,42 @@
-# Reading 临时交接快照（自动化通过，待体验验收）
+# Reading 临时交接快照
 
-更新：2026-09-30。用户要求在额度用尽前保存，并总结当前成果。
+更新：2026-10-01。后续会话优先读此文件。当前阶段 3 EPUB 基础功能已实现，仍有人工验收项，不能说阶段 3 已完成。
 
-## 第一结论
+## 最新成果与实际状态
 
-不要从头开始。正式 Flutter App 和真实词典已经写好。此前「长按复制后空白点击」回归已修复，双平台集成测试通过。随后用户实测发现 iPhone 点词气泡闪现，现已定位修复并获用户确认。最新 17 项单元/组件测试及静态分析通过，双平台 debug 构建通过；本次气泡修复未重跑会卸载用户书架的设备集成测试。当前进入阶段 2 体验验收；原生文件选择导入、系统栏实际外观与部分视觉项目还未验收，不能把阶段 2 标为全部验收完成。阶段 3 尚未开始。
+- EPUB 2/3 导入、spine 正文顺序、嵌套目录及章节内目标、图片、简单表格、正文/表格本地查词、保存/重开位置已接通。
+- 新解析器 `app/lib/book/epub.dart`；元数据与章节在 BookContent，图片独立存 SQLite BLOB。数据库 schema 1→2 保留旧 TXT/位置/样式/设置，删除书籍会清理图片。
+- 限制：可重排 UTF-8 EPUB，50 MB 文件/20 MB 单资源/150 MB 声明总解压/10000 文件；实际流式解压限制及 CRC 检查。DRM/固定版式拒绝；复杂表格标明按行显示；SVG、原书 CSS/字体还原、脚注跳转、图片放大未实现。
+- 阶段 2 iPhone 气泡闪现已在前轮修复，用户明确确认正常。本次保留 metrics 几何比较和长按松开才开面板的修复。
+- iPad：通用工程支持横竖屏；1180×820 横屏组件测试通过，但 iPad 模拟器/真机未验收、横屏双页和翻页未做，仍必做。
 
-## 最新完成节点：导入回归与 iPhone 气泡修复
+## 最新验证证据
 
-- 用户要求预留额度记录；额度曾从约 30% 降到 14%。上次直接 attach 因自动审批额度不足未执行，用户随后要求继续，本轮执行已恢复。
-- **用户发现并确认解决的故障**：iPhone 每次点词后约 30–60ms 释义消失。通过正常应用的原生日志，调用栈明确为 `_ReaderPageState.didChangeMetrics → dismiss`。原代码对任何屏幕参数通知无条件关闭；现捕获查词时的 size/DPR/padding/insets，仅实际几何变化才关闭。临时诊断代码已移除。
-- 用户在热更新后明确回复「现在正常了」。17 项完整测试通过；回归覆盖重复 metrics 通知和 3 秒停留不关闭、真实 resize 关闭旧锚点；静态分析通过。
-- **持久安装已完成**：正常 iOS debug 构建成功，`simctl install` 覆盖升级，重新启动 Reading PID `71858`。升级前后核对同一个书籍 ID，现有 1 本书保留。模拟器升级会更换数据容器 UUID，不能因旧路径消失就认定丢数据；需重新 `simctl get_app_container`。
-- Android 最新正常 debug APK 构建成功（38.3s），位于 `app/build/app/outputs/flutter-apk/app-debug.apk`。本次没有重装安卓模拟器，它仍是上次运行版本；以后体验安卓时先以正常入口更新。
-- **TXT 导入新增 8 项回归**：真实 UTF-8 BOM/GBK 文件走正式读取、compute 解析、SQLite、阅读页、返回书架；另测取消、空文件、NUL 内容、读失败、超过 20MB、选择器异常，以及失败后重试。替代了原生对话框，不能宣称原生文件选择 E2E 完成。
-- 样本 `app/test/fixtures/txt/`，说明含编码及校验值。人工验收表 `docs/phase-2-acceptance.md`。原生文件选择和部分视觉仍待核验。
-- 用户询问 EPUB 是否开始，已明确答复：**尚未开始，阶段 3 必做**，保留文字/图片/简单表格、最终翻页、必做 iPad 双页等原计划。
-- 所有本轮测试/构建/attach 会话均已结束。attach 用 `d` 分离，不用 `q` 终止用户应用。
+- 最终完整宿主测试 28/28 通过（session 12099，2026-10-01），覆盖手机/平板尺寸 EPUB 阅读流程、旧库迁移以及现有 TXT/查词/气泡回归。
+- 静态分析最终 No issues found（94641）。最后只改了测试中的 sqlite dispose→close；生产代码 lint 只加大括号。
+- iOS debug 构建通过（21734），Android debug APK 构建通过（3127）。
+- iPhone 正常覆盖升级成功（9469），启动 PID 79756，升级前后比较同一书籍 ID/位置/样式与设置，1 本现有书完整保留。CUA 实际看到书架仍为 35%，以及“导入 EPUB / TXT”入口。
+- 安卓上次安装因额度不足未获自动审批；2026-10-01 用户要求继续后正常审批重试成功，`adb install -r` 返回 Success（60156）。样本已传到 `/sdcard/Download/reading-lesson.epub`，正常启动 `dev.reading.reading_app/.MainActivity`。不是卸载重装。
+- 所有 Flutter 测试/构建会话已结束。当前没有运行中测试或 attach。本次代码将随 EPUB 检查点提交；执行 `git log -1 --oneline` 查看最新提交（前一基线 a86f894）。
 
-## 当前准确下一步（优先于下面历史记录）
+## 精确下一步
 
-1. 不再重复重跑已通过检查。继续核验阶段 2 的实际系统文件选择导入和气泡/主题/系统栏外观。不要在用户已开始体验的模拟器执行 `flutter test -d`，它可能卸载 App。
-2. 打开 Reading 可直接继续阅读现有示例，修复已持久安装。收集用户对阶段 2 的体验反馈；可测试真机型号/版本仍未提供。
-3. 阶段 2 体验确认后正式进入阶段 3，优先 EPUB 文字/图片/简单表格与目录，之后按原计划推进翻页/双页/真实句子翻译；不改成长期 TXT-only。
-4. 继续重要节点立即更新本文件，保留额度用于记录、提交和明确剩余项。
+1. 原生 EPUB 选择仍未完成：安卓已更新，样本在下载目录 `reading-lesson.epub`；在 Reading → 添加书籍 → 导入 EPUB / TXT → Downloads 选择样本，验证目录、图片、表格、气泡、重开位置。当前 CUA 只能绑定 Android Studio 欢迎窗，AX 点击 More Actions 无变化，坐标备用操作返回 `noWindowsAvailable`；不要绕过 CUA 改用 adb input/其他 UI 自动化。
+2. iPhone 已确认新导入入口；最后读取界面已回到旧书正文（可能用户正在体验），未继续打断。实际通过 iOS 系统选择器导入 EPUB 仍待验收。不要在已有用户数据的模拟器执行 `flutter test -d`。
+3. 使用用户实际 EPUB 教材核验兼容性；当前样本为原创结构样本。`docs/epub-acceptance.md` 明确列出了 SVG、脚注跳转、CSS/内嵌字体、固定版式等限制，不能称教材全格式支持。
+4. 继续阶段 3：先补完整目录/脚注与真实 EPUB 验收，再实现左右翻页及必做 iPad 横屏双页。当前 iPad 仅做了平板横屏组件测试，不能声称 iPad 设备验收完成。其余翻译/生词本/书签/搜索/备份按原计划。
+5. 每个重要节点更新本文件，额度下降先保存记录。现无运行中的测试/build/attach 会话。
+
+## 文件与命令
+
+- 新测试：`app/test/epub_test.dart`、扩展 `app/test/file_import_test.dart`；原创样本 `app/test/fixtures/epub/`，重建 `python3 scripts/make_epub_fixture.py`。
+- 构建产物：`app/build/ios/iphonesimulator/Runner.app`、`app/build/app/outputs/flutter-apk/app-debug.apk`。
+- 当前 CUA 绑定 `readingDevice = cua.getApp('com.apple.dt.Devices')`；重新启动会话先读 CUA 文档。原生所有 UI 操作仅 CUA。
+- Android SDK `/Users/tty/Library/Android/sdk`；iPhone UDID `144FF884-EC04-4E7F-9BE6-AFF8264E8699`，Android `emulator-5554`。
+- iPhone 安装会变更容器 UUID，动态 `simctl get_app_container`；升级比对结果在忽略的 `artifacts/epub-upgrade-state.json`，不含书正文。
+- 详细 EPUB 范围/验收见 `docs/epub-acceptance.md`；原计划 `docs/original-plan.md`。
+
+## 前期阶段 2 记录（历史，最新状态以上文为准）
 
 ## 项目与基线
 

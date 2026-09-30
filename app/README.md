@@ -1,6 +1,6 @@
 # Reading Flutter App
 
-当前实现阶段 2：英语 TXT／粘贴导入、书架、本地查词、滚动阅读、样式和段落位置保存。
+当前实现阶段 2，并接通阶段 3 EPUB 基础阅读：EPUB 2/3、TXT／粘贴导入、书架、本地查词、滚动阅读、目录、图片、简单表格、样式和内容块位置保存。
 完整执行状态和验收结果见上层 `HANDOFF.md`；原计划见 `../docs/original-plan.md`。
 
 ## 重建与运行
@@ -38,7 +38,7 @@ READING_PROXY_URL='' ../scripts/flutterw test integration_test/reading_flow_test
 
 ## 代码与数据
 
-- `lib/book`：可替换 BookParser，UTF-8/GBK TXT 解析和章节检测。
+- `lib/book`：可替换 BookParser，UTF-8/GBK TXT 和可重排 EPUB 2/3 解析、目录及图片资源。
 - `lib/text`：LanguageSupport，英文点词范围、句子范围及候选词。
 - `lib/dict`：DictionaryProvider，只读 SQLite ECDICT；词形与释义顺序查询。
 - `lib/db`：drift 业务数据库，书架/正文/段落索引/设置；不修改词典包。
@@ -48,6 +48,6 @@ READING_PROXY_URL='' ../scripts/flutterw test integration_test/reading_flow_test
 
 数据仅保存在 App 的 Application Support 目录。卸载 App 会清除本地书架；跨设备备份在阶段 3 实施。
 
-当前 TXT 单文件上限 20 MB。阅读位置精确到段落。滚动阅读是阶段 2 的中间形态；EPUB、翻页、iPad 双页、词汇本和翻译按阶段 3 继续完成。
+当前 TXT 上限 20 MB，EPUB 上限 50 MB；位置精确到内容块。EPUB 基础功能范围和限制见 [EPUB 验收记录](../docs/epub-acceptance.md)。翻页、iPad 双页、词汇本和翻译按阶段 3 继续完成。
 
 TXT 真实文件与错误重试回归：`test/file_import_test.dart`（替代原生选择对话框）；样本在 `test/fixtures/txt/`。原生操作验收与未关闭项见 [阶段 2 验收表](../docs/phase-2-acceptance.md)。

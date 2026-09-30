@@ -19,7 +19,7 @@ class ReadingDatabase extends GeneratedDatabase {
     }),
   );
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
   @override
   Iterable<TableInfo<Table, Object?>> get allTables => const [];
   @override
@@ -33,8 +33,19 @@ class ReadingDatabase extends GeneratedDatabase {
       await customStatement(
         'CREATE TABLE settings(key TEXT PRIMARY KEY, value TEXT NOT NULL)',
       );
+      await createAssets();
+    },
+    onUpgrade: (_, from, to) async {
+      if (from < 2) await createAssets();
     },
   );
+  Future<void> createAssets() => customStatement('''CREATE TABLE book_assets(
+    book_id TEXT NOT NULL, path TEXT NOT NULL, data BLOB NOT NULL,
+    PRIMARY KEY(book_id,path))''');
+  Future<Uint8List?> asset(String id, String path) async => (await customSelect(
+    'SELECT data FROM book_assets WHERE book_id=? AND path=?',
+    variables: [Variable(id), Variable(path)],
+  ).getSingleOrNull())?.read<Uint8List>('data');
   Future<List<Book>> books() async => (await customSelect(
     'SELECT * FROM books ORDER BY last_read_at DESC, created_at DESC',
   ).get()).map(_book).toList();
@@ -58,10 +69,18 @@ class ReadingDatabase extends GeneratedDatabase {
 
   Future<String> addBook(String title, BookContent content) async {
     final id = const Uuid().v4(), now = DateTime.now().millisecondsSinceEpoch;
-    await customStatement(
-      'INSERT INTO books(id,title,content,created_at,updated_at) VALUES(?,?,?,?,?)',
-      [id, title, content.encode(), now, now],
-    );
+    await transaction(() async {
+      await customStatement(
+        'INSERT INTO books(id,title,content,created_at,updated_at) VALUES(?,?,?,?,?)',
+        [id, title, content.encode(), now, now],
+      );
+      for (final asset in content.assets.entries) {
+        await customStatement(
+          'INSERT INTO book_assets(book_id,path,data) VALUES(?,?,?)',
+          [id, asset.key, asset.value],
+        );
+      }
+    });
     return id;
   }
 
@@ -69,8 +88,10 @@ class ReadingDatabase extends GeneratedDatabase {
     'UPDATE books SET title=?,updated_at=? WHERE id=?',
     [title, DateTime.now().millisecondsSinceEpoch, id],
   );
-  Future<void> deleteBook(String id) =>
-      customStatement('DELETE FROM books WHERE id=?', [id]);
+  Future<void> deleteBook(String id) => transaction(() async {
+    await customStatement('DELETE FROM book_assets WHERE book_id=?', [id]);
+    await customStatement('DELETE FROM books WHERE id=?', [id]);
+  });
   Future<void> savePosition(String id, int position) {
     final now = DateTime.now().millisecondsSinceEpoch;
     return customStatement(

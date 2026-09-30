@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:drift/native.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -12,6 +13,7 @@ import 'package:reading_app/db/database.dart';
 import 'package:reading_app/dict/dictionary.dart';
 import 'package:reading_app/main.dart';
 import 'package:reading_app/reader/reader.dart';
+import 'package:reading_app/reader/bubble.dart';
 
 // Replace only the native selection dialog. File I/O, compute/TXT parsing,
 // SQLite writes, navigation, and the reader use their production code.
@@ -36,7 +38,7 @@ class _Picker extends FilePickerPlatform {
   }) async {
     calls++;
     expect(type, FileType.custom);
-    expect(allowedExtensions, ['txt']);
+    expect(allowedExtensions, ['txt', 'epub']);
     if (error case final failure?) throw failure;
     return selection;
   }
@@ -94,7 +96,7 @@ Future<void> _until(WidgetTester tester, bool Function() ready) async {
 Future<void> _chooseFile(WidgetTester tester) async {
   await tester.tap(find.byKey(const ValueKey('add-book')));
   await tester.pumpAndSettle();
-  await tester.tap(find.text('导入 TXT 文件'));
+  await tester.tap(find.text('导入 EPUB / TXT'));
   await tester.pump();
 }
 
@@ -149,6 +151,76 @@ void main() {
   Future<void> unmount(WidgetTester tester) async {
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();
+  }
+
+  for (final version in [2, 3]) {
+    testWidgets(
+      'EPUB $version import, image/table, word lookup, TOC and reopen',
+      (tester) async {
+        tester.view.physicalSize = version == 2
+            ? const Size(430, 1000)
+            : const Size(1180, 820);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+        picker.selection = _PickedFile(
+          '../epub/lesson-epub$version.epub',
+          name: 'lesson.EPUB',
+        );
+        await mount(tester);
+        await _chooseFile(tester);
+        await _until(
+          tester,
+          () => find.byType(ReaderPage).evaluate().isNotEmpty,
+        );
+        final saved = await tester.runAsync(() => database.books());
+        expect(saved!.single.title, 'Reading EPUB $version sample');
+        expect(saved.single.content.format, 'epub');
+        await _until(tester, () => find.byType(Image).evaluate().isNotEmpty);
+        expect(find.text('图片无法显示'), findsNothing);
+        expect(tester.takeException(), isNull);
+        await tester.tap(find.byTooltip('目录'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Word table'));
+        await tester.pumpAndSettle();
+        final rich = find.descendant(
+          of: find.byKey(const ValueKey('cell-6-1-0')),
+          matching: find.byType(RichText),
+        );
+        final render = tester.renderObject<RenderParagraph>(rich);
+        final wordBox = render
+            .getBoxesForSelection(
+              const TextSelection(baseOffset: 0, extentOffset: 8),
+            )
+            .first
+            .toRect();
+        await tester.tapAt(render.localToGlobal(wordBox.center));
+        await tester.pumpAndSettle();
+        expect(find.byType(WordBubble), findsOneWidget);
+        expect(find.text('明天；未来'), findsOneWidget);
+        await tester.pump(const Duration(seconds: 3));
+        expect(find.byType(WordBubble), findsOneWidget);
+        await tester.tap(find.byTooltip('目录'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Second lesson'));
+        await tester.pumpAndSettle();
+        expect(find.text('Chapter Two', findRichText: true), findsOneWidget);
+        await tester.tap(find.byKey(const ValueKey('back-library')));
+        await _until(tester, () => find.byType(ReaderPage).evaluate().isEmpty);
+        final book = await tester.runAsync(
+          () => database.book(saved.single.id),
+        );
+        expect(book!.position, book.content.chapters.last.block);
+        await tester.tap(find.text(book.title).first);
+        await _until(
+          tester,
+          () => find.byType(ReaderPage).evaluate().isNotEmpty,
+        );
+        expect(find.text('Chapter Two', findRichText: true), findsOneWidget);
+        expect(tester.takeException(), isNull);
+        await unmount(tester);
+      },
+    );
   }
 
   for (final encoding in ['UTF-8', 'GBK']) {

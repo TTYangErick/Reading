@@ -48,6 +48,8 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
   );
   bool chrome = true, expanded = false, saving = false;
   int? selectedParagraph;
+  String? selectedCell;
+  final imageLoads = <String, Future<Uint8List?>>{};
   WordRange? selected;
   Rect? anchor;
   _ViewportGeometry? lookupViewport;
@@ -159,12 +161,18 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
     }
   }
 
-  Future<void> lookup(int index, WordRange range, Rect globalRect) async {
+  Future<void> lookup(
+    int index,
+    WordRange range,
+    Rect globalRect, {
+    String? cell,
+  }) async {
     final box = stackKey.currentContext!.findRenderObject()! as RenderBox;
     final generation = ++lookupGeneration;
     lookupViewport = viewportGeometry;
     setState(() {
       selectedParagraph = index;
+      selectedCell = cell;
       selected = range;
       anchor = globalRect.shift(-box.localToGlobal(Offset.zero));
       entry = null;
@@ -282,10 +290,10 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
 
   void contents() {
     dismiss();
-    final chapters = widget.book.content.blocks.indexed
-        .where((b) => b.$2.heading)
-        .toList();
-    final current = chapters.where((b) => b.$1 <= position).lastOrNull?.$1;
+    final chapters = widget.book.content.contents;
+    final preceding = chapters.where((c) => c.block <= position).toList()
+      ..sort((a, b) => a.block.compareTo(b.block));
+    final current = preceding.lastOrNull?.block;
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
@@ -306,14 +314,17 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
                       children: chapters
                           .map(
                             (c) => ListTile(
-                              title: Text(c.$2.text),
-                              selected: c.$1 == current,
-                              trailing: c.$1 == current
+                              title: Padding(
+                                padding: EdgeInsets.only(left: c.depth * 12.0),
+                                child: Text(c.title),
+                              ),
+                              selected: c.block == current,
+                              trailing: c.block == current
                                   ? const Icon(Icons.check, size: 18)
                                   : null,
                               onTap: () {
                                 Navigator.pop(context);
-                                jump(c.$1);
+                                jump(c.block);
                               },
                             ),
                           )
@@ -324,6 +335,114 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
         ),
       ),
     );
+  }
+
+  Widget paragraph(
+    int index,
+    String text,
+    TextStyle textStyle, {
+    String? cell,
+    bool heading = false,
+  }) => ReaderParagraph(
+    key: ValueKey(cell == null ? 'paragraph-$index' : 'cell-$index-$cell'),
+    text: text,
+    language: language,
+    style: heading
+        ? textStyle.copyWith(
+            fontSize: style.size * 1.35,
+            fontWeight: FontWeight.w600,
+            height: 1.3,
+          )
+        : textStyle,
+    align: style.justify && !heading && cell == null
+        ? TextAlign.justify
+        : TextAlign.start,
+    selection: selectedParagraph == index && selectedCell == cell
+        ? selected
+        : null,
+    onWord: (word, rect) => lookup(index, word, rect, cell: cell),
+    onBlank: toggleChrome,
+    onSentence: (offset) => copySentence(text, offset),
+  );
+
+  Widget renderBlock(int index, TextStyle textStyle, Color ink) {
+    final block = widget.book.content.blocks[index];
+    if (block.image case final path?) {
+      return FutureBuilder<Uint8List?>(
+        future: imageLoads.putIfAbsent(
+          path,
+          () => ref.read(databaseProvider).asset(widget.book.id, path),
+        ),
+        builder: (context, snapshot) => Column(
+          children: [
+            // Fixed viewport avoids shifting saved block positions on late image loads.
+            SizedBox(
+              height: 260,
+              width: double.infinity,
+              child: snapshot.data == null
+                  ? Center(
+                      child: Text(
+                        snapshot.connectionState == ConnectionState.done
+                            ? '图片无法读取'
+                            : '正在读取图片…',
+                        style: textStyle,
+                      ),
+                    )
+                  : Image.memory(
+                      snapshot.data!,
+                      fit: BoxFit.contain,
+                      cacheWidth: 1400,
+                      semanticLabel: block.text,
+                      errorBuilder: (_, error, stack) =>
+                          Center(child: Text('图片无法显示', style: textStyle)),
+                    ),
+            ),
+            if (block.text.isNotEmpty && block.text != '图片')
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  block.text,
+                  style: textStyle.copyWith(fontSize: style.size * .8),
+                ),
+              ),
+          ],
+        ),
+      );
+    }
+    if (block.rows case final rows?) {
+      final columns = rows.fold<int>(0, (n, row) => math.max(n, row.length));
+      return SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Table(
+          defaultColumnWidth: const FixedColumnWidth(160),
+          border: TableBorder.all(color: ink.withValues(alpha: .25)),
+          defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+          children: [
+            for (var r = 0; r < rows.length; r++)
+              TableRow(
+                decoration: r == 0 && block.tableHeader
+                    ? BoxDecoration(color: ink.withValues(alpha: .07))
+                    : null,
+                children: [
+                  for (var c = 0; c < columns; c++)
+                    Padding(
+                      padding: const EdgeInsets.all(10),
+                      child: paragraph(
+                        index,
+                        c < rows[r].length ? rows[r][c] : '',
+                        r == 0 && block.tableHeader
+                            ? textStyle.copyWith(fontWeight: FontWeight.w700)
+                            : textStyle,
+                        cell: '$r-$c',
+                      ),
+                    ),
+                ],
+              ),
+          ],
+        ),
+      );
+    }
+    return paragraph(index, block.text, textStyle, heading: block.heading);
   }
 
   Future<void> leave() async {
@@ -406,28 +525,7 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
                               ),
                               top: blocks[index].heading ? 16 : 0,
                             ),
-                            child: ReaderParagraph(
-                              key: ValueKey('paragraph-$index'),
-                              text: blocks[index].text,
-                              language: language,
-                              style: blocks[index].heading
-                                  ? textStyle.copyWith(
-                                      fontSize: style.size * 1.35,
-                                      fontWeight: FontWeight.w600,
-                                      height: 1.3,
-                                    )
-                                  : textStyle,
-                              align: style.justify && !blocks[index].heading
-                                  ? TextAlign.justify
-                                  : TextAlign.start,
-                              selection: selectedParagraph == index
-                                  ? selected
-                                  : null,
-                              onWord: (word, rect) => lookup(index, word, rect),
-                              onBlank: toggleChrome,
-                              onSentence: (offset) =>
-                                  copySentence(blocks[index].text, offset),
-                            ),
+                            child: renderBlock(index, textStyle, palette.ink),
                           ),
                         ),
                       ),

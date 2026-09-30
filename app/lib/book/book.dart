@@ -6,19 +6,75 @@ import 'package:gbk_codec/gbk_codec.dart';
 class BookBlock {
   final String text;
   final bool heading;
-  const BookBlock(this.text, {this.heading = false});
-  Map<String, dynamic> toJson() => {'text': text, 'heading': heading};
-  factory BookBlock.fromJson(Map<String, dynamic> j) =>
-      BookBlock(j['text'] as String, heading: j['heading'] == true);
+  final String? image;
+  final List<List<String>>? rows;
+  final bool tableHeader;
+  const BookBlock(
+    this.text, {
+    this.heading = false,
+    this.image,
+    this.rows,
+    this.tableHeader = false,
+  });
+  Map<String, dynamic> toJson() => {
+    'text': text,
+    'heading': heading,
+    if (image != null) 'image': image,
+    if (rows != null) 'rows': rows,
+    if (tableHeader) 'tableHeader': true,
+  };
+  factory BookBlock.fromJson(Map<String, dynamic> j) => BookBlock(
+    j['text'] as String,
+    heading: j['heading'] == true,
+    image: j['image'] as String?,
+    tableHeader: j['tableHeader'] == true,
+    rows: (j['rows'] as List?)?.map((r) => (r as List).cast<String>()).toList(),
+  );
+}
+
+class BookChapter {
+  final String title;
+  final int block, depth;
+  const BookChapter(this.title, this.block, {this.depth = 0});
+  Map<String, dynamic> toJson() => {
+    'title': title,
+    'block': block,
+    'depth': depth,
+  };
+  factory BookChapter.fromJson(Map<String, dynamic> j) => BookChapter(
+    j['title'] as String,
+    j['block'] as int,
+    depth: j['depth'] as int? ?? 0,
+  );
 }
 
 class BookContent {
   final List<BookBlock> blocks;
-  final String encoding;
-  const BookContent(this.blocks, {this.encoding = 'UTF-8'});
+  final String encoding, format;
+  final String? title;
+  final List<BookChapter> chapters;
+  // Import-only bytes. Stored separately as BLOBs, never in shelf JSON.
+  final Map<String, Uint8List> assets;
+  const BookContent(
+    this.blocks, {
+    this.encoding = 'UTF-8',
+    this.format = 'txt',
+    this.title,
+    this.chapters = const [],
+    this.assets = const {},
+  });
+  List<BookChapter> get contents => chapters.isNotEmpty
+      ? chapters
+      : blocks.indexed
+            .where((b) => b.$2.heading)
+            .map((b) => BookChapter(b.$2.text, b.$1))
+            .toList();
   String encode() => jsonEncode({
     'blocks': blocks.map((b) => b.toJson()).toList(),
     'encoding': encoding,
+    'format': format,
+    'title': title,
+    'chapters': chapters.map((c) => c.toJson()).toList(),
   });
   factory BookContent.decode(String text) {
     final j = jsonDecode(text) as Map<String, dynamic>;
@@ -26,7 +82,12 @@ class BookContent {
       (j['blocks'] as List)
           .map((x) => BookBlock.fromJson(x as Map<String, dynamic>))
           .toList(),
-      encoding: j['encoding'] as String,
+      encoding: j['encoding'] as String? ?? 'UTF-8',
+      format: j['format'] as String? ?? 'txt',
+      title: j['title'] as String?,
+      chapters: (j['chapters'] as List? ?? [])
+          .map((x) => BookChapter.fromJson(x as Map<String, dynamic>))
+          .toList(),
     );
   }
 }
@@ -97,7 +158,7 @@ class ParserRegistry {
     for (final parser in parsers) {
       if (parser.extensions.contains(extension)) return parser.parse(data);
     }
-    throw const FormatException('当前版本支持 TXT 文件，也可以粘贴文本。');
+    throw const FormatException('请选择 EPUB 或 TXT 文件，也可以粘贴文本。');
   }
 }
 

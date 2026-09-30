@@ -5,12 +5,14 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../book/book.dart';
+import '../book/epub.dart';
 import '../core/providers.dart';
 import '../main.dart';
 import '../reader/reader.dart';
 import '../reader/settings.dart';
 
-BookContent parseImportedText(Uint8List bytes) => TxtParser().parse(bytes);
+BookContent parseImportedFile((String, Uint8List) input) =>
+    ParserRegistry([TxtParser(), EpubParser()]).parse(input.$1, input.$2);
 
 class LibraryPage extends ConsumerStatefulWidget {
   const LibraryPage({super.key});
@@ -54,22 +56,31 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
     try {
       final file = await FilePicker.pickFile(
         type: FileType.custom,
-        allowedExtensions: ['txt'],
+        allowedExtensions: ['txt', 'epub'],
       );
       if (file == null || !mounted) return;
       setState(() => importing = true);
       final size = await file.length();
-      if (size != null && size > 20 * 1024 * 1024) {
-        throw const FormatException('文本超过 20 MB，请先拆分后导入。');
+      final epub = file.name.toLowerCase().endsWith('.epub');
+      final limit = epub ? EpubParser.maxFileSize : 20 * 1024 * 1024;
+      if (size != null && size > limit) {
+        throw FormatException(
+          epub ? 'EPUB 超过 50 MB，请使用较小的文件。' : '文本超过 20 MB，请先拆分后导入。',
+        );
       }
-      final content = await compute(
-        parseImportedText,
+      final content = await compute(parseImportedFile, (
+        file.name,
         await file.readAsBytes(),
-      );
+      ));
       if (!mounted) return;
       setState(() => importing = false);
       await add(
-        file.name.replaceFirst(RegExp(r'\.txt$', caseSensitive: false), ''),
+        content.title?.isNotEmpty == true
+            ? content.title!
+            : file.name.replaceFirst(
+                RegExp(r'\.(txt|epub)$', caseSensitive: false),
+                '',
+              ),
         content,
       );
     } catch (error) {
@@ -110,7 +121,7 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
             ),
             ListTile(
               leading: const Icon(Icons.note_add_outlined),
-              title: const Text('导入 TXT 文件'),
+              title: const Text('导入 EPUB / TXT'),
               subtitle: const Text('支持 UTF-8 和 GBK 编码'),
               onTap: () {
                 Navigator.pop(context);
