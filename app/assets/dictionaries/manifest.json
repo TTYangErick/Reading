@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "id": "ecdict-en-zh",
+  "name": "ECDICT 英汉词典",
+  "language": "en",
+  "targetLanguage": "zh",
+  "file": "ecdict.sqlite",
+  "source": {
+    "repository": "https://github.com/skywind3000/ECDICT",
+    "revision": "bc015ed2e24a7abef49fc6dbbb7fe32c1dadaf8b",
+    "url": "https://raw.githubusercontent.com/skywind3000/ECDICT/bc015ed2e24a7abef49fc6dbbb7fe32c1dadaf8b/ecdict.csv",
+    "license": "MIT",
+    "sha256": "1a6947e04785db63613a92e14903cdae7954f7e84860b10e68e5c7cbb3f9c3cf"
+  },
+  "counts": {
+    "entries": 770611,
+    "senses": 1183688,
+    "forms": 57247
+  },
+  "bytes": 118620160,
+  "sha256": "cd263f3fddcb5543224eb1075b1a8ed6d62998a64cca64448c358b96f5bd3485"
+}

@@ -1,0 +1,13 @@
+Reading 0.2
+
+英汉词典：ECDICT，skywind3000 及其贡献者，MIT 协议。
+https://github.com/skywind3000/ECDICT
+内置词典由固定版本数据生成，保留词典原始释义顺序。
+
+内置字体：Literata、Source Serif 4、EB Garamond、Atkinson Hyperlegible，SIL Open Font License。
+https://github.com/google/fonts
+苹果系统字体仅在 iOS 使用，不随应用分发。
+
+阅读示例：Jane Austen, Pride and Prejudice (1813)，公版作品节选。沿用项目原型提供的英文正文。
+
+感谢 Flutter、Riverpod、drift、SQLite 及其他开源依赖。
