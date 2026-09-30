@@ -1,20 +1,24 @@
 # Reading 最新小步骤交接
 
-更新：2026-10-01。本轮为工作方式与交接规范更新，仅改文档；应用功能检查点仍是 `18fae5b`，前一文档检查点 `78d75b3`。新的八项结构取代七项结构，保留原有必要上下文。
+更新：2026-10-01。本轮执行安卓原生 EPUB 导入验收；开工 HEAD `e0d4533` 且工作区干净，应用功能检查点仍为 `18fae5b`。目前等待用户完成可见模拟器中的验收操作，未标通过。
 
 ## Current Goal
 
-把“小步执行 + 持续交接”落实为项目规则，保留整体计划，但将下一轮行动收敛为一个能独立验收的小步骤。本轮不开展 EPUB、脚注或分页功能修改。
+只验收安卓正常应用从系统文件选择器导入 `reading-lesson.epub`，检查图片、表格点词、目录及重开位置。本轮不展开 iPhone、脚注或分页。
 
 ## Completed
 
-- `AGENTS.md` 写入单目标周期、开工核对、按依赖拆分、适当验证、预算保护、八项交接及唯一 Next Step 规则。
-- 本文件改为八项结构；保留已有 EPUB 成果、验证来源、关键代码和风险，将后续工作单独放入 Remaining Plan。
-- `PLAN.md` 列出有明确成果和验收条件的执行队列；`HANDOFF.md` 更新新规则索引。唯一下一步为安卓原生 EPUB 导入验收，不再把两端验收、脚注和分页合成一轮。
+- 已读取最新交接、项目规则、整体计划和专项验收记录，核对源码导入入口仍允许 TXT/EPUB。
+- 只读核实 `emulator-5554` 在线，`dev.reading.reading_app` 已安装且进程存在，样本在 Downloads（2695 bytes）。宿主/设备 SHA-256 一致。
+- CUA 重新枚举仍未列出模拟器；通过实际进程路径以及 `Android Emulator` 名称连接均返回 `Invalid app`。可连接 Android Studio，已观察到 Device Manager 中 Reader Phone 在线。
+- 用户已明确反馈能看到安卓 Reading。因工具仍无法绑定其窗口，已请求用户执行四项原生验收；目前尚未收到这四项结果。
 
 ## Verification
 
-本轮检查：开工时 Git 干净，最近两次提交与旧交接一致；只修改交接/计划文档。已通过：交接八项标题及顺序检查、唯一 Next Step 检查、11 个续做文件存在性检查、`git diff --check`。应用代码、测试、构建产物未更改，因此不重跑应用测试；历史应用验证见下一节，不能当成本轮执行结果。
+- 本轮环境检查通过：设备在线、应用包/进程存在；本地与安卓样本 SHA-256 均为 `724fb95af485d48e53d306fe0930702f1eb3450adb17e638b94fc8b469c72928`。没有重装、清空、修改应用数据或启动会卸载 App 的测试。
+- CUA 已直接看见 Device Manager 的 Reader Phone（Android 16/API 36）在线；用户确认可见 Reading。只能说明设备/界面可见，不能证明导入成功。
+- 待用户反馈：系统选择器实际导入、图片/表格、Tomorrow 气泡停留、Second lesson 跳转及返回书架重开恢复。尚无本轮导入行为通过证据。
+- 本轮没有改应用代码，不重跑此前已通过的 28 项测试/构建。后续收到反馈必须明确标为“用户实测”或“代理直接验证”。
 
 ## Current Project State
 
@@ -24,7 +28,7 @@
 
 **尚未完成**：左右翻页、必做 iPad 横屏双页、脚注跳转、真实句子翻译、生词本、书签/正文搜索、备份等阶段 3 后续功能。
 
-本轮无新增应用功能或设备验收结果。没有本轮启动的 build/test/attach 任务。文档修改单独提交；下一轮用 `git status --short` / `git log -2 --oneline` 核对状态，不依赖历史 PID 或会话 ID。
+本轮已核实安卓环境并获用户确认 Reading 可见；原生导入行为仍待反馈。没有本轮启动的 build/test/attach 任务；未提交变动为交接/验收文档。下一轮用 Git 状态核对，不依赖历史 PID。
 
 ## Key Decisions / Context
 
@@ -68,7 +72,7 @@ READING_PROXY_URL='' ../scripts/flutterw test --no-pub --reporter expanded
 
 ## Known Issues / Risks
 
-- Android CUA 只能绑定 Android Studio 欢迎窗；AX 点击 More Actions 无变化，坐标备用操作返回 `noWindowsAvailable`，原生导入因此未验收。不要绕过 CUA 使用 adb input 或其他 UI 自动化。
+- 当前 Android CUA 可读取 Android Studio/Device Manager，但不能绑定独立模拟器（两种入口均 `Invalid app`）；用户确认窗口可见。旧的 `noWindowsAvailable` 是前轮记录，当前不能仅凭它推断设备未显示。已转为用户协助原生验收，不绕过 CUA。
 - iPhone 最后一次观察已回到旧书正文，可能用户正在体验；继续操作前先看当前界面，勿盲目沿用历史元素索引。
 - 当前章节按 UTF-8 解码；SVG、原书 CSS/内嵌字体精确排版、图片放大未实现；合并单元格/嵌套表格明确降级成按行文本。固定版式和 DRM 拒绝导入，不能宣称全格式教材支持。
 - 限额：EPUB 50 MB、单资源解压 20 MB、声明总解压 150 MB、10,000 文件；实际流式解压限制、CRC 和路径检查已实现。真实大书性能/内存尚未验收；查词 <5ms/翻译 <1s 仍是目标，不是全面达标结论。
@@ -77,13 +81,13 @@ READING_PROXY_URL='' ../scripts/flutterw test --no-pub --reporter expanded
 
 ## Next Step
 
-**唯一优先步骤：在安卓模拟器完成一份现有样本的原生 EPUB 导入验收，并记录真实结果。**
+**唯一优先步骤：收齐并核实当前用户协助的安卓 EPUB 验收结果，关闭或准确交接这一个验收项。**
 
-- 开工先读本交接、核对 `git status` 与 `docs/epub-acceptance.md`；重新确认 `emulator-5554`、正常应用和样本是否仍存在，避免直接复用旧窗口索引。样本先前已在 `/sdcard/Download/reading-lesson.epub`；宿主副本 `app/test/fixtures/epub/lesson-epub3.epub`。
-- 仅通过 CUA 操作可见安卓窗口：Reading → 添加书籍 → 导入 EPUB / TXT → Downloads → `reading-lesson.epub`。
-- 成功标准：原生选择后进入书籍，确认书名、图片、简单表格；点表格单词气泡保持；用目录跳到第二章，返回书架并重开后恢复位置。将通过项/未通过项写入 `docs/epub-acceptance.md`，再更新八项交接。
-- 若窗口仍不可操作，记录当前 CUA 错误及未完成的准确环节，并请求用户协助显示模拟器窗口或操作该导入路径；不能绕过 CUA，不能把阻塞说成通过，也不切换去做 iOS、脚注或分页。
-- 若发现产品缺陷，保留最小复现；修复若不能在同一小步骤可靠验证，就交接为下一轮唯一任务。本轮验收不重装、不清空用户书架，不在用户设备执行 `flutter test -d`。
+用户已收到操作路径：Reading → 添加书籍 → 导入 EPUB / TXT → Downloads → `reading-lesson.epub`；确认图片/表格，点 Tomorrow 等几秒，目录选择 Second lesson，返回书架重开仍在第二章。
+
+- 若用户反馈四项正常，按“用户实测通过”更新 `docs/epub-acceptance.md` 与本文件；不冒称代理端自动化通过。结束本轮，下一轮唯一任务再设为 iPhone 原生导入验收。
+- 若反馈失败，记录失败步骤和原话；只有与此复现直接相关的诊断属于本步骤。修复过大时以最小复现交接成下一轮唯一目标，不展开其他模块。
+- 若中断前仍无反馈，保持该问题待答，不反复重新枚举窗口或重复发同样问题，不以超时当作通过。
 
 ## Remaining Plan
 

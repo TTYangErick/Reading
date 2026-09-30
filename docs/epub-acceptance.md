@@ -14,6 +14,19 @@
 
 28/28 宿主测试通过，静态分析无问题，iOS/Android 正常 debug 构建通过，两端已覆盖升级。iPhone 升级前后核对原书籍/位置/设置保留。安卓下载目录已放置 `reading-lesson.epub`。原生选取仍未验收：安卓 UI 自动化返回 `noWindowsAvailable`，iPhone 已确认入口但未实际选书。
 
+## 安卓原生验收进行中（2026-10-01）
+
+本轮只读确认：设备在线、正常应用已安装且运行；Downloads 样本 2695 bytes，SHA-256 与宿主一致：`724fb95af485d48e53d306fe0930702f1eb3450adb17e638b94fc8b469c72928`。
+
+CUA 可读 Device Manager 中在线 Reader Phone，但独立模拟器无法绑定（`Invalid app`）。用户确认能看到 Reading，已请求用户执行以下四项；目前结果待反馈，不标通过：
+
+| 检查 | 预期 | 当前证据 |
+|---|---|---|
+| 系统选择导入 | Downloads 选择 reading-lesson.epub，打开 Reading EPUB 3 sample | 待用户反馈 |
+| 图片/表格 | 显示三条蓝色柱状图和词汇表 | 待用户反馈 |
+| 点词 | Tomorrow 释义停留几秒不自动消失 | 待用户反馈 |
+| 目录/位置 | Second lesson → 返回书架 → 重开仍在第二章 | 待用户反馈 |
+
 ## 自动验证
 
 `app/test/epub_test.dart`：EPUB 2/3、spine 与 manifest 顺序不同、嵌套目录与片段定位、图片带空格路径、表格、旧 JSON、旧库升级及关闭重开、图片删除清理、损坏/越界/伪造解压大小/DRM/固定版式、缺图占位、合并单元格明确降级。
