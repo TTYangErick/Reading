@@ -31,9 +31,9 @@ dart run tool/inspect_epub.dart '/Users/tty/Downloads/Harry Potter and the Chamb
 
 本轮只新增本地诊断工具和文档，未改应用逻辑，因此没有重复双平台构建或把历史 28/28 测试当成本轮重新执行。
 
-## 确认的限制与问题
+## 初次检查确认的限制与问题（修复进展见下方）
 
-1. **Reading 缺陷：SVG 内嵌栅格封面静默丢失。** `titlepage.xhtml` 使用 `<svg><image xlink:href="cover_image.jpg" ... /></svg>`。包内 JPEG 存在（100,523 bytes），`_Blocks.walk` 只处理 HTML `img`，忽略 SVG `image` 且不显示占位。这份书仍有另一张普通封面可显示，但不能将其计为全部图片支持。建议下一次修复仅支持从简单 SVG 图片包装中提取本地 PNG/JPEG 等既有支持格式，并复用路径/大小/CRC/外部资源安全限制；不引入通用 SVG 执行或渲染。
+1. **初次检查的 Reading 缺陷（现已修复解析，尚未设备验收）：SVG 内嵌栅格封面静默丢失。** `titlepage.xhtml` 使用 `<svg><image xlink:href="cover_image.jpg" ... /></svg>`。包内 JPEG 存在（100,523 bytes），`_Blocks.walk` 只处理 HTML `img`，忽略 SVG `image` 且不显示占位。这份书仍有另一张普通封面可显示，但不能将其计为全部图片支持。建议下一次修复仅支持从简单 SVG 图片包装中提取本地 PNG/JPEG 等既有支持格式，并复用路径/大小/CRC/外部资源安全限制；不引入通用 SVG 执行或渲染。
 2. **源书问题：NCX 漏第 15 章。** Reading 当前仅在目录完全为空时回退到正文标题，因此忠实保留了不完整目录。正文仍可滚动阅读到第 15 章。若后续要补全目录，需单独设计去重/顺序/目标规则，不能只为这本书硬编码章节号或拼写修正。
 3. **没有表格。** 本文件不能新增简单表格兼容性证据；表格的既有依据仍是原创样本测试和两端用户实测。它是小说，不能代替真实教材测试。
 4. SVG、原书 CSS/内嵌字体精确排版、图片放大、脚注交互和分页等既有限制没有因本次检查消失。
@@ -43,3 +43,12 @@ dart run tool/inspect_epub.dart '/Users/tty/Downloads/Harry Potter and the Chamb
 用户在现有安卓 Reading 通过“添加书籍 → 导入 EPUB / TXT”选择 Downloads 的 `reading-real-book.epub`，检查第 1、9、18 章、普通英文词释义保持和返回书架重开位置，对这一整组检查明确回复“全部正常”。上述项目按用户实测通过记录，不冒称代理自动原生 UI 验收。界面工具不能绑定独立安卓模拟器的限制仍在，但不再阻塞本项结论。
 
 未向业务数据库注入正文，未在用户模拟器执行可能卸载应用的 `flutter test -d`。iPhone 本书原生导入、iPad/真机、大书/内存、精确排版均未验证。
+
+## SVG 封面修复进度（2026-10-02）
+
+- `_Blocks.addSvgImage` 支持直接单 image 与可选纯文本 title/desc，识别 `href` / namespaced `xlink:href`；复用 `addImage` 与既有路径、格式、解压上限及 CRC 校验。复杂 SVG 显示占位，不作通用 SVG 渲染，无新增依赖。
+- 新增 4 项回归先在旧代码失败、修复后通过；全量宿主 32/32 通过，`flutter analyze` 无问题，iOS 模拟器 debug 构建通过。用户提醒 limit 后优先保存，安卓构建未执行。
+- 本书重新解析得到 3,180 块、2 张图片；`cover_image.jpg` 100,523 bytes 和 `Cover.jpg` 124,594 bytes 均提取。3,178 个文字块及顺序与旧指纹完全一致；17 个目录目标统一 +1 正确，JSON 往返一致。新第 15 章索引 2452；原 NCX 缺项未修补。
+- 证据在忽略的 `artifacts/real-epub-audit-svg-fixed.json`；修复前证据保留。单次本机解析 125 ms，不外推设备性能。
+- 未自动重解析旧书，旧书位置不变；新导入才包含新图片。两端已安装 App 未更新，旧安卓 APK 不含本次修复，封面原生视觉尚未验收。上方用户“全部正常”是修复前的阅读验收。
+- 下一轮只完成安卓构建及工程交付记录，之后再进入脚注解析模型。

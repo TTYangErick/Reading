@@ -299,6 +299,72 @@ class _Blocks {
     buffer = '';
   }
 
+  // Both HTML images and simple SVG wrappers use the same bounded local loader.
+  void addImage(String src, String alt) {
+    final uri = Uri.tryParse(src);
+    final extension = p.posix.extension(uri?.path ?? '').toLowerCase();
+    if (uri != null &&
+        !uri.hasScheme &&
+        !uri.hasAuthority &&
+        const {'.png', '.jpg', '.jpeg', '.gif', '.webp'}.contains(extension)) {
+      final resource = book.resolve(path, src);
+      if (book.files.containsKey(resource)) {
+        book.assets[resource] = book.data(resource);
+        book.blocks.add(BookBlock(alt, image: resource));
+      } else {
+        book.blocks.add(BookBlock('[$alt：图片缺失]'));
+      }
+    } else {
+      book.blocks.add(BookBlock('[$alt：暂不支持此图片格式]'));
+    }
+  }
+
+  void addSvgImage(dom.Element svg) {
+    final images = svg.children.where((e) => e.localName == 'image').toList();
+    // Extract one raster image, not a partial rendering of arbitrary SVG.
+    // Reject composition/effects and never descend into scripts/foreignObject.
+    final simple =
+        images.length == 1 &&
+        svg.children.every(
+          (e) =>
+              const {'image', 'title', 'desc'}.contains(e.localName) &&
+              e.children.isEmpty,
+        ) &&
+        [svg, ...svg.children].every(
+          (e) => !const {
+            'transform',
+            'filter',
+            'mask',
+            'clip-path',
+            'style',
+            'hidden',
+          }.any(e.attributes.containsKey),
+        );
+    final image = simple ? images.single : null;
+    // package:html stores foreign namespaced attributes as AttributeName keys.
+    final src =
+        image?.attributes['href'] ??
+        image?.attributes[const dom.AttributeName(
+          'xlink',
+          'href',
+          'http://www.w3.org/1999/xlink',
+        )];
+    if (image == null || src == null || src.trim().isEmpty) {
+      book.blocks.add(const BookBlock('[图片：暂不支持此 SVG 图形]'));
+      return;
+    }
+    if (image.id.isNotEmpty) {
+      book.targets['$path#${image.id}'] = book.blocks.length;
+    }
+    final title = clean(
+      svg.children
+          .where((e) => e.localName == 'title')
+          .map((e) => e.text)
+          .join(' '),
+    );
+    addImage(src, title.isEmpty ? '图片' : title);
+  }
+
   void walk(dom.Node node) {
     if (node is dom.Text) {
       buffer += node.text;
@@ -344,6 +410,7 @@ class _Blocks {
       'hr',
       'table',
       'img',
+      'svg',
     }.contains(tag);
     if (block) flush();
     final id = node.id;
@@ -353,31 +420,9 @@ class _Blocks {
         const {'h1', 'h2', 'h3', 'h4', 'h5', 'h6'}.contains(tag) || heading;
     if (tag == 'img') {
       final src = node.attributes['src'];
-      final alt = node.attributes['alt'] ?? '图片';
-      if (src != null) {
-        final uri = Uri.tryParse(src);
-        final extension = p.posix.extension(uri?.path ?? '').toLowerCase();
-        if (uri != null &&
-            !uri.hasScheme &&
-            !uri.hasAuthority &&
-            const {
-              '.png',
-              '.jpg',
-              '.jpeg',
-              '.gif',
-              '.webp',
-            }.contains(extension)) {
-          final resource = book.resolve(path, src);
-          if (book.files.containsKey(resource)) {
-            book.assets[resource] = book.data(resource);
-            book.blocks.add(BookBlock(alt, image: resource));
-          } else {
-            book.blocks.add(BookBlock('[$alt：图片缺失]'));
-          }
-        } else {
-          book.blocks.add(BookBlock('[$alt：暂不支持此图片格式]'));
-        }
-      }
+      if (src != null) addImage(src, node.attributes['alt'] ?? '图片');
+    } else if (tag == 'svg') {
+      addSvgImage(node);
     } else if (tag == 'table') {
       final caption = node.querySelector('caption');
       if (caption != null) book.blocks.add(BookBlock(clean(caption.text)));

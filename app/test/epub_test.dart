@@ -27,6 +27,92 @@ Uint8List change(
 }
 
 void main() {
+  for (final attribute in ['href', 'xlink:href']) {
+    test(
+      'SVG $attribute raster wrapper keeps order, anchors and saved assets',
+      () async {
+        final book = EpubParser().parse(
+          change({
+            'OPS/text/first.xhtml':
+                '''<html><body><p>Before</p>
+          <svg id="${attribute == 'href' ? 'table' : 'wrapper'}" xmlns="http://www.w3.org/2000/svg"
+            xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 480 240">
+            <title>Cover</title><image id="${attribute == 'href' ? 'cover' : 'table'}" $attribute="../images/lesson%20image.png"
+              width="480" height="240"/>
+          </svg><p>After</p></body></html>''',
+          }),
+        );
+        expect(book.blocks.take(3).map((b) => b.text), [
+          'Before',
+          'Cover',
+          'After',
+        ]);
+        expect(book.blocks[1].image, 'OPS/images/lesson image.png');
+        expect(book.blocks[book.chapters[1].block].image, book.blocks[1].image);
+        final database = ReadingDatabase(NativeDatabase.memory());
+        addTearDown(database.close);
+        final id = await database.addBook('SVG test', book);
+        await database.savePosition(id, 2);
+        final saved = (await database.book(id))!;
+        expect(saved.position, 2);
+        expect(saved.content.blocks[1].image, book.blocks[1].image);
+        expect(
+          await database.asset(id, book.blocks[1].image!),
+          book.assets.values.single,
+        );
+      },
+    );
+  }
+  test('SVG href takes precedence; missing/remote/unsupported images stay explicit', () {
+    for (final entry in {
+      '../missing.png': '图片缺失',
+      'https://example.com/cover.png': '暂不支持此图片格式',
+      '//example.com/cover.png': '暂不支持此图片格式',
+      'data:image/png;base64,AA==': '暂不支持此图片格式',
+      '../images/cover.svg': '暂不支持此图片格式',
+    }.entries) {
+      final book = EpubParser().parse(
+        change({
+          'OPS/text/first.xhtml':
+              '<html><body><svg xmlns:xlink="http://www.w3.org/1999/xlink"><image href="${entry.key}" xlink:href="../images/lesson%20image.png"/></svg><p>After</p></body></html>',
+        }),
+      );
+      expect(book.assets, isEmpty);
+      expect(book.blocks.first.text, contains(entry.value));
+      expect(book.blocks[1].text, 'After');
+    }
+    expect(
+      () => EpubParser().parse(
+        change({
+          'OPS/text/first.xhtml': '<html><body><svg><image href="../../../outside.png"/></svg></body></html>',
+        }),
+      ),
+      throwsFormatException,
+    );
+  });
+  test('unsupported SVG is one visible placeholder, never partial content', () {
+    for (final content in [
+      '<path d="M0 0 L10 10"/>',
+      '<image/>',
+      '<image href="../images/lesson%20image.png"/><image href="other.png"/>',
+      '<image href="../images/lesson%20image.png"/><script>SECRET</script>',
+      '<foreignObject><p>SECRET</p></foreignObject>',
+      '<image href="../images/lesson%20image.png" transform="rotate(30)"/>',
+    ]) {
+      final book = EpubParser().parse(
+        change({
+          'OPS/text/first.xhtml':
+              '<html><body><p>Before</p><svg>$content</svg><p>After</p></body></html>',
+        }),
+      );
+      expect(book.blocks.take(3).map((b) => b.text), [
+        'Before',
+        '[图片：暂不支持此 SVG 图形]',
+        'After',
+      ]);
+      expect(book.assets, isEmpty);
+    }
+  });
   for (final version in [2, 3]) {
     test(
       'EPUB $version: spine, nested TOC fragments, image paths, table and serialization',
