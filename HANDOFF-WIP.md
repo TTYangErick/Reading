@@ -1,112 +1,75 @@
 # Reading 最新小步骤交接
 
-更新：2026-10-02。本轮起点 `7cb9967`，工作区核对干净，应用源码无变化。本轮仅完成之前因 limit 留下的安卓构建核验和交接同步。
+更新：2026-10-02；本轮起点 `a1288b2`。当前只实现正文脚注链接/锚点解析模型；不接 UI。本轮代码已完成，38/38 测试、静态分析及 iOS/安卓构建均通过；未安装到模拟器，UI 未接入。
 
 ## Current Goal
 
-补完 SVG 栅格封面修复的安卓 debug 构建，关闭该修复的工程验证记录；不展开脚注、分页或设备安装。
+建立向后兼容的脚注文字链接、来源范围和目标位置模型；解析章内/跨连续阅读章节的链接及返回引用，不改变正文顺序或已保存进度。
 
 ## Completed
 
-- 使用 `scripts/flutterw` 默认代理正常构建 Android debug APK，构建退出码 0。
-- 新 APK 已包含 `7cb9967` 的 SVG 封面修复；两端构建验证至此完成。没有更新或卸载模拟器应用，没有改动书架。
-- 产物证据保存于忽略目录 `artifacts/svg-android-build.json`，包含来源提交、命令、大小、SHA-256、未安装标记及工具链警告。
-- 同步主交接、计划与两份 EPUB 验收文档；下一轮唯一任务设为脚注链接/锚点解析模型。
+- `app/lib/book/book.dart` 新增 `BookPosition`、`BookLink`、`BookLinkKind`、`BookLinkStatus`；`BookContent` 增加 links/anchors 的可选 JSON 字段，旧 TXT/EPUB 缺字段默认为空，数据库 schema 仍为 2。
+- `app/lib/book/epub.dart` 新增链接采集、规范化文字偏移映射、全文解析后目标解析。支持普通文字 `<a href>`、noteref/backlink 标记、章内/跨章 ID、URI 解码路径；不联网。
+- 缺目标不回退到章节首；未载入的独立页面明确 unavailableDocument；外链/错误链接保留文字与状态，不执行且不阻断导入。重复 ID 首个优先，末尾空锚点不跳进下一章。
+- 新增原创 `app/test/epub_links_test.dart` 6 项测试和实现边界说明 `docs/epub-links.md`。
+- 保留旧 EPUB 的文字/图片/表格和词典阅读流程，没有更改阅读器 UI 或业务数据库存量内容。
 
 ## Verification
 
-- **本轮新增**：在 `app/` 执行 `../scripts/flutterw build apk --debug --no-pub` 成功，Gradle assembleDebug 16.8s；session 71469 已结束。
-- APK：`app/build/app/outputs/flutter-apk/app-debug.apk`，247,039,777 bytes；SHA-256 `87fab7708d785d1e9fca5a01981952c1a031f7baaae9e86d07b222036c7ec79f`。
-- 构建出现 Java native-access 和 SDK XML 版本提示，均非阻断；本轮没有为警告更改环境或依赖。
-- **沿用上一轮证据，未重复执行**：`7cb9967` 的 32/32 宿主测试、静态分析、iOS 模拟器 debug 构建通过；真实书 3,178 个文字块保持原顺序，提取两张图片，17 项目录目标正确 +1，JSON 往返一致。
-- Git 核对应用源码/测试与 `7cb9967` 一致。本轮只有文档变更，按规则不重跑已通过且不受影响的测试/iOS 构建。
-- **未验证**：新封面的原生视觉；两端模拟器已安装 App 未更新。历史用户“全部正常”指修复前真实书阅读，不是这次新封面验收。
+- 38/38 全部宿主测试通过（session 62701）；涵盖旧 32 项及新增 6 项链接测试：EPUB 2/3、表情/空白偏移、脚注返回、缺失/外链/错误/非连续目标、重复 ID、跨块范围、旧 JSON、数据库关闭重开。
+- `flutter analyze` 无问题（session 51142）；格式与 `git diff --check` 通过。
+- iOS 模拟器 debug 构建通过（session 6130 已结束，Xcode 9.8s）。安卓 debug 构建也通过（session 17940 已结束，Gradle 8.1s；仅有此前记录过的 Java native-access 警告）。
+- 真实书 `artifacts/real-epub-audit-links.json` 对照 `real-epub-audit-svg-fixed.json`：3,180 块、文字指纹顺序、17 目录、2 图片完全一致，JSON 往返通过。不是脚注真实书/设备交互验收。
+- 本轮未安装新构建、未在用户设备运行 `flutter test -d`；原生脚注 UI 未实现/未验证，封面新版本视觉也仍待验收。
 
 ## Current Project State
 
-阶段 2 主体、阶段 3 EPUB 基础版已实现；SVG 简单单张栅格封面修复已通过解析/持久化测试、静态分析和双平台构建。旧库不重解析，原位置保留；新导入才增加封面块。
+阶段 2 主体、阶段 3 EPUB 基础版和简单 SVG 栅格封面修复已实现。正文链接数据已实现且通过宿主验证，尚没有任何链接点击/返回交互。独立脚注页未载入；需要下一步骤补充，不能声称完整脚注功能。
 
-安卓真实小说基础阅读曾获用户实测通过；iPhone/安卓原创样本也通过。原 NCX 漏第 15 章未补全，正文不缺。iPhone 本真实书、真实教材、大书、iPad 设备未验收。iPad 仅通用工程/宽屏组件测试，左右翻页与横屏双页未实现。
+用户已确认旧版安卓真实小说第 1/9/18 章、查词和重开正常，两端原创样本也通过；这不证明本轮脚注或新封面设备显示通过。原书 NCX 漏第 15 章，正文不缺，目录补全未做。
 
-当前无运行中的 build/test/attach/下载服务。原 EPUB 保留在用户 Downloads，安卓副本 `/sdcard/Download/reading-real-book.epub`。无数据库注入，不重新启动旧样本服务器。
+iPad 仅通用工程和宽屏组件测试，左右翻页/必做横屏双页/iPad 设备验收未完成。真实翻译、生词本、书签/搜索、备份等未完成。
+
+当前无运行中的构建/测试/下载/调试任务，无数据库注入。两端已安装 App 未覆盖更新，旧书不重解析，位置保留。
 
 ## Key Decisions / Context
 
-**工作方式调整**：此前 Next Step 混合多端验收、脚注和分页；依用户新要求改为一个周期一个目标，其余放入 Remaining Plan，防止额度/上下文中断时遗留大范围未验证修改。
-
-- 保留 Flutter + Riverpod + drift 及 `BookParser`、`LanguageSupport`、`DictionaryProvider`、`Translator` 接口；新增 `EpubParser`，不另造第二套阅读/查词实现。
-- `BookContent` 保存格式、标题、章节和内容块；图片只在导入时携带字节，持久化进入 `book_assets`，避免图片膨胀书架正文 JSON。`BookBlock` 兼容旧文本并增加图片路径/表格行；`BookChapter` 指向内容块索引。
-- 图片固定显示高度以减少异步加载导致的位置跳动；位置仍精确到内容块，尚不是分页定位模型。
-- 原计划按阶段 2 验收后进入阶段 3；用户于 2026-09-30 明确授权先开始 EPUB，10-01 要求继续，因此阶段 2 未验收项继续保留，但不阻塞 EPUB。最终左右翻页/iPad 双页要求没有取消。
-- 现有 EPUB 基础版仍用滚动阅读，开发该版本时未并行扩展翻译和分页；教材范围保持文字、图片、简单表格，复杂固定版式/公式不扩大进来。
-- 必须保留两处既有修复：`didChangeMetrics` 仅实际视窗几何变化才关闭气泡；长按复制在 `onLongPressEnd` 才打开面板，避免取消尚未结束的手势。iPhone 闪现问题已获用户确认解决。
-
-项目根目录 `/Users/tty/Desktop/Coding/Reading`；正式工程 `app/`；原型 `prototype/reader.html` 只作视觉参考，含模拟数据。
-
-| 入口 | 续做要点 |
-|---|---|
-| `app/lib/book/book.dart` | `BookParser`/`ParserRegistry`、`BookContent`、`BookBlock`、`BookChapter`，保持旧 JSON 兼容 |
-| `app/lib/book/epub.dart` | `EpubParser.parse`、`_Epub.read`/`addChapter`、`_Blocks.walk`：容器/OPF、资源、目录与内容提取 |
-| `app/lib/library/library.dart` | `parseImportedFile`、`importFile`：系统选择、后台解析、入库与打开书籍 |
-| `app/lib/db/database.dart` | schema 2；`addBook`/`asset`/`deleteBook`、`savePosition`；图片和正文一起事务保存 |
-| `app/lib/reader/reader.dart` | `renderBlock`、`contents`、`jump`、`lookup`、`ReaderParagraph`，包含气泡和长按回归修复 |
-| `app/test/epub_test.dart` | EPUB 2/3、错误文件、资源、旧库迁移/关闭重开等回归 |
-| `app/test/file_import_test.dart` | 真实文件→解析→数据库→阅读，但替代原生选择对话框；不能当作原生 E2E |
-| `docs/epub-acceptance.md`、`docs/phase-2-acceptance.md` | 已验证范围及未关闭的人工验收 |
-| `scripts/make_epub_fixture.py` | 重建 `app/test/fixtures/epub/` 原创样本，不依赖网络 |
-
-- Flutter 3.47.5/Dart 3.13.4；使用 `scripts/flutterw`，默认代理 `http://127.0.0.1:7897`，仅影响子进程。下载/构建保留默认代理；设备调试 `READING_PROXY_URL=''` 清除两组代理，使用支持的 `--no-pub`。代理未被证明是历史设备断连的唯一原因。
-- iPhone UDID `144FF884-EC04-4E7F-9BE6-AFF8264E8699`，bundle `dev.reading.readingApp`；UI 宿主 Device Hub `com.apple.dt.Devices`。
-- Android SDK `/Users/tty/Library/Android/sdk`，设备 `emulator-5554`，包名 `dev.reading.reading_app`；样本 `/sdcard/Download/reading-lesson.epub`。不要并行对同设备 run/test。
-- 真实 ECDICT 数据库在 `app/assets/dictionaries/ecdict.sqlite`（Git 忽略）；不要删除后直接构建。仅缺失时用 `scripts/fetch_assets.py` 和 `dict_builder/build_ecdict.py` 重建。770,611 词条；不是原型示例词典。
-- 最近构建产物：`app/build/ios/iphonesimulator/Runner.app` 已含本轮 SVG 修复；`app/build/app/outputs/flutter-apk/app-debug.apk` 本轮已构建，包含 SVG 修复。两端已安装 App 都未更新。升级前后 iPhone 比对资料在忽略的 `artifacts/epub-upgrade-state.json`。
-- 解析器在 `7cb9967` 修复，测试/分析已通过；本轮仅补安卓构建，两端构建均通过。复查命令：
-
-```sh
-cd /Users/tty/Desktop/Coding/Reading/app
-../scripts/flutterw analyze
-READING_PROXY_URL='' ../scripts/flutterw test --no-pub --reporter expanded
-../scripts/flutterw build ios --simulator --debug --no-pub
-../scripts/flutterw build apk --debug --no-pub
-```
-
-
-真实书籍核验上下文：
-- 用户原文件完整路径、SHA 和统计见 `docs/real-epub-compatibility.md`；不要再次索要路径或扫描私人目录。
-- 本地证据在 Git 忽略的 `artifacts/real-epub-audit.json` 和 `artifacts/real-epub-comparison.json`；后者含源文件逐块校验结论。它们无正文。
-- 诊断工具执行：在 `app/` 下 `dart run tool/inspect_epub.dart '<报告中的原文件路径>'`；定向检查 `dart analyze tool/inspect_epub.dart`。工具只诊断，不修改书籍。
-- 安卓文件 `/sdcard/Download/reading-real-book.epub`，SHA `b552446064088e5b955327d1fd9434f9db6b36d740bfdb6d940c6a514884a63a`。
-- 小说没有表格，不将本次验证描述为真实教材验收完成。
-
-
-SVG 修复实现决定（7cb9967）：
-- 这是栅格图片提取，不是 SVG 渲染。仅允许直接单 image 和纯文本 title/desc；尺寸由既有阅读器图片布局处理，不复刻 SVG 坐标/原 CSS。没有引入新依赖。
-- HTML 包将 `xlink:href` 存为 `dom.AttributeName`，不能简单用字符串 key 读取，见 `addSvgImage`。
-- 复用 `addImage` → `_Epub.resolve/data` 保持路径限制、解压上限与 CRC；外链只生成占位，不发请求。
-- 不重解析旧库，不做位置迁移。新导入产生新内容块索引；本书新第 15 章在 2452，历史报告 2451 对应旧解析版本。
-- 新证据 `artifacts/real-epub-audit-svg-fixed.json`；修复前 `real-epub-audit.json` 保留作对照，不覆盖。原书/正文不入 Git。
+- 项目 `/Users/tty/Desktop/Coding/Reading`，Flutter 工程 `app/`；需求 `PLAN.md` / `docs/original-plan.md`，最新模型详解 `docs/epub-links.md`。原型仅作视觉参考，不当真实功能。
+- **本轮拆分决定**：原先拟模型之后直接做 UI；独立脚注页（linear=no 或非 spine 文档）涉及补充内容存储和跨文档位置，为保持单步规模，本轮仅建正文链接模型并明确 unavailableDocument。下一轮先完成补充脚注页解析，再做 UI，不将遗漏包装成完成。
+- `BookPosition(block,offset)` 使用最终文字 UTF-16 偏移；`BookLink` 的 source block/start/end 是半开区间；仅 status=resolved 时 target 非空。`targetKey` 为规范化包内 path 加可选 #decoded-id。全量 anchors 进入 JSON，旧数据缺省为空。
+- `_NormalizedText` 对 raw 非空白片段保存映射，用二分定位范围，链接跨块时拆成各块范围。`_Blocks` activeLinks/closedLinks/rawAnchors 收集标记；`_Epub.resolveLink` 在连续正文解析完后解析目标。
+- 重复 ID：同文档首个胜出；不同文档同 ID 隔离。脚注链接缺 fragment 目标绝不使用章节 fallback；目录原有 fallback 规则保留。
+- 外部 URI（包括 javascript）、data 链接不执行/不联网；UI 以后只能按明确状态处理，不能对 external 自动调用系统打开。错误转义/路径越界/查询参数为 invalid。
+- 媒体/简单表格沿用原实现，表格内/图片链接和 `<a name>` 旧锚点本轮未捕获；正文仍保留，不把这些列为支持。
+- 保留 Flutter/Riverpod/drift；`BookParser`/`LanguageSupport`/`DictionaryProvider`/`Translator` 接口不变。正文/元数据进 books JSON，图片进 book_assets。旧书不自动重解析；无 schema 升级。
+- 必须保留 iPhone 气泡修复（didChangeMetrics 仅真实几何变化关闭）及长按复制 onLongPressEnd 才开面板，避免重现手势取消。
+- `scripts/flutterw` 默认两组代理 `http://127.0.0.1:7897`；设备 run/test 用 `READING_PROXY_URL=''` 并支持时 --no-pub。构建使用默认代理，SDK/工具缓存可能需正常提权。
+- 检查命令（在 app 下）：`READING_PROXY_URL='' ../scripts/flutterw test --no-pub --reporter expanded`；`../scripts/flutterw analyze`；`../scripts/flutterw build ios --simulator --debug --no-pub`；`../scripts/flutterw build apk --debug --no-pub`。
+- 真实词典 `app/assets/dictionaries/ecdict.sqlite` Git 忽略，770,611 词条；不要删除/无故重建。缺失时才用 scripts/fetch_assets.py 与 dict_builder/build_ecdict.py。
+- iPhone UDID `144FF884-EC04-4E7F-9BE6-AFF8264E8699`，bundle `dev.reading.readingApp`，UI 宿主 `com.apple.dt.Devices`；安卓 `emulator-5554` / `dev.reading.reading_app`，SDK `/Users/tty/Library/Android/sdk`。
+- 两端构建输出 `app/build/ios/iphonesimulator/Runner.app` / `app/build/app/outputs/flutter-apk/app-debug.apk`；最新构建状态见 Verification，已安装版本不会自动更新。
+- 用户真实书路径/SHA 在 `docs/real-epub-compatibility.md`，安卓副本 `/sdcard/Download/reading-real-book.epub`，不要再次索要路径、修改原书或加入 Git。旧本地样本服务 8765 已停止。
 
 ## Known Issues / Risks
 
-- 简单 SVG 本地栅格包装已解决；通用 SVG、嵌套组、多图组合、精确 CSS/字体/滤镜仍不支持，以占位显示。不是完整 SVG 能力。
-- 旧书不会自动补封面；正常安装新版后需另行导入一份才能检查新提取结果，不应为验收删除用户旧书和进度。
-- 原 NCX 漏第 15 章，正文不缺；目录补全需独立设计去重/顺序，不能硬编码本书。
-- 安卓 CUA 无法绑定独立模拟器；用户此前可协助验收。iPhone/iPad/真机本次新封面视觉未验证。
-- 分页/双页、脚注交互、真实翻译、生词本、书签/搜索/备份仍未完成；阶段 2 部分视觉/TXT 原生导入验收保留。
-- 构建的 Java/SDK XML 兼容提示已记录，当前不阻塞；将来工具链升级时再统一处理，不为通过的构建扩张本轮工作。
+- linear=no/非 spine 的独立脚注页只标 unavailableDocument，不含目标文字；表格内链接、图片链接、旧 name 锚点未支持。需要逐步补齐，不能把本轮模型称作完整脚注支持。
+- 当前链接都不会在 UI 中响应；阅读器仅有原有点词行为。真实书脚注类型/复杂 CSS 隐藏脚注等兼容性未验证。
+- 新封面视觉未验收；简单 SVG 栅格包装已支持，通用 SVG 不支持。两端旧书保持旧解析结果，新导入才用新模型。
+- 安卓 CUA 无法绑定独立模拟器，历史设备验收由用户协助。不在用户书架设备执行 flutter test -d（可能卸载），正常覆盖安装后 iOS 容器 UUID 会变，应重新查询。
+- 原 NCX 缺第 15 章未补全；原书排版、复杂表格/公式/固定版式不扩张。查词/翻译性能目标不是已全面达标结论。
 
 ## Next Step
 
-**唯一优先步骤：实现脚注链接/锚点解析与向后兼容的数据模型，不接阅读器 UI。**
+**唯一优先步骤：支持独立存放、非连续阅读的脚注页解析与存储，仍不接 UI。**
 
-1. 读取 `app/lib/book/book.dart` 的 `BookContent`/`BookBlock` JSON 与 `app/lib/book/epub.dart` 的 `_Epub.targets`、`_Blocks.walk`。先限定支持的行内文本链接、章内/跨章目标和返回链接表示，不提前实现跳转界面。
-2. 定义链接文本范围和目标位置，保留 EPUB ID/路径映射；空白规范化后链接偏移必须匹配最终正文。旧 TXT/EPUB JSON 缺少新字段时正常读取。
-3. 用原创 EPUB 2/3 夹具验证章内/跨章脚注、返回链接、空白/行内标签、缺失目标、外链和重复 ID；外链不联网。兼顾 `linear=no` 脚注资源可能未进入正文的问题，先记录/限定支持方式，不悄悄丢失目标或改动原章节顺序。
-4. 运行针对模型、解析器、旧书读取的测试及必要分析/构建，明确脚注 UI 未实现；若模型范围过大先拆小并保存，不同轮展开跳转、返回、分页。
+1. 读 `docs/epub-links.md` 与 book.dart/epub.dart。扩展位置标识和补充文档数据容器，使正文块索引不因脚注页面载入而改变；兼容当前 links/anchors JSON 和更旧无链接 JSON。
+2. 仅解析 manifest 中被正文链接引用的本地 XHTML/HTML（含 linear=no），保持原 spine/目录/阅读进度不变；按现有限额限制资源，避免循环引用/重复加载/无限递归，不访问外部 URI。
+3. 以原创样本验证跳入独立脚注目标和脚注返回正文、链式/循环引用边界、缺文件/目标、持久化重开及已有正文逐块不变；不要只改状态而不保存真实脚注内容。
+4. 完成测试/分析/必要构建后写交接；下一轮再做正文链接点击、脚注展示与返回。若规模超出周期继续拆分，不提前做分页。
 
 ## Remaining Plan
 
-1. 脚注模型/解析之后，下一独立周期接阅读器跳转及返回并回归位置恢复。目录缺项补全独立排队；新版封面视觉在正常覆盖升级后另行导入一份验收，保留旧书/进度。
-2. 分页依次位置映射/文字分页、图片表格、手机翻页与恢复；随后必做 iPad 横屏双页，再独立模拟器/真机验收。
-3. 阶段 3 其余：真实翻译/缓存、Wiktionary、生词本/导出、书签/正文搜索、备份、真机；阶段 2 剩余视觉/TXT 原生导入验收保留。
-4. 阶段 4 MDX/MDD/PDF、阶段 5 可选同步/多语言均未开始。总体计划见 `PLAN.md` / `docs/original-plan.md`。
+1. 独立脚注模型/解析完成后再接 UI 跳转及返回（含点词手势兼容和位置恢复）；name 锚点/表格链接/目录缺项补全按必要性单独排队。新封面正常覆盖升级后另行导入一份验收，保留旧书。
+2. 分页依次定位/文字分页、图片表格、手机翻页与恢复；然后 iPad 横屏双页与设备验收。
+3. 阶段 3 真实翻译/缓存、Wiktionary、生词本/导出、书签/搜索、备份、真机；阶段 2 剩余视觉/TXT 原生导入验收保留。
+4. 阶段 4 MDX/MDD/PDF、阶段 5 可选同步/多语言尚未开始。

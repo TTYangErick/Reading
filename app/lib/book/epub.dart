@@ -51,6 +51,9 @@ class _Epub {
   final cache = <String, Uint8List>{};
   final blocks = <BookBlock>[];
   final targets = <String, int>{};
+  final anchors = <String, BookPosition>{};
+  final pendingLinks = <_PendingLink>[];
+  final documents = <String>{};
   final assets = <String, Uint8List>{};
   final chapters = <BookChapter>[];
   _Epub(Uint8List bytes) {
@@ -187,10 +190,18 @@ class _Epub {
       final path = resolve(opfPath, item.getAttribute('href')!);
       if (!seen.add(path)) continue;
       targets[path] = blocks.length;
+      documents.add(path);
+      anchors[path] = BookPosition(blocks.length);
       final document = html.parse(text(path));
       final walker = _Blocks(this, path);
       walker.walk(document.body!);
       walker.flush();
+      // An empty trailing anchor must not silently point into the next chapter.
+      anchors.removeWhere(
+        (key, value) =>
+            (key == path || key.startsWith('$path#')) &&
+            value.block >= blocks.length,
+      );
     }
     if (blocks.isEmpty) throw const FormatException('EPUB 没有可阅读的正文。');
     final nav = manifest.values
@@ -268,7 +279,50 @@ class _Epub {
       format: 'epub',
       assets: assets,
       chapters: chapters,
+      links: pendingLinks.map(resolveLink).toList(),
+      anchors: anchors,
       title: elements(opf, 'title').firstOrNull?.innerText.trim(),
+    );
+  }
+
+  BookLink resolveLink(_PendingLink link) {
+    var status = BookLinkStatus.invalid;
+    String? key;
+    BookPosition? target;
+    try {
+      if (RegExp(r'%(?![0-9a-fA-F]{2})').hasMatch(link.href)) {
+        throw const FormatException('Invalid link escape');
+      }
+      final uri = Uri.parse(link.href);
+      if (uri.hasScheme || uri.hasAuthority) {
+        status = BookLinkStatus.external;
+      } else if (!uri.hasQuery) {
+        final path = resolve(link.path, link.href);
+        final fragment = Uri.decodeComponent(uri.fragment);
+        key = fragment.isEmpty ? path : '$path#$fragment';
+        if (!documents.contains(path)) {
+          status = files.containsKey(path)
+              ? BookLinkStatus.unavailableDocument
+              : BookLinkStatus.missingTarget;
+        } else {
+          target = anchors[key];
+          status = target == null
+              ? BookLinkStatus.missingTarget
+              : BookLinkStatus.resolved;
+        }
+      }
+    } on FormatException {
+      // A bad link is non-actionable; it must not prevent reading the chapter.
+    }
+    return BookLink(
+      block: link.block,
+      start: link.start,
+      end: link.end,
+      href: link.href,
+      kind: link.kind,
+      status: status,
+      targetKey: key,
+      target: target,
     );
   }
 
@@ -287,16 +341,114 @@ class _Epub {
 
 String clean(String text) => text.replaceAll(RegExp(r'\s+'), ' ').trim();
 
+class _PendingLink {
+  final String path, href;
+  final int block, start, end;
+  final BookLinkKind kind;
+  _PendingLink(
+    this.path,
+    this.block,
+    this.start,
+    this.end,
+    this.href,
+    this.kind,
+  );
+}
+
+class _TextLink {
+  final String href;
+  final BookLinkKind kind;
+  int start;
+  int? end;
+  _TextLink(this.href, this.kind, this.start);
+}
+
+/// Maps raw whitespace to normalized text without changing UTF-16 offsets.
+class _NormalizedText {
+  final runs = <({int rawStart, int rawEnd, int start})>[];
+  late final String text;
+  _NormalizedText(String raw) {
+    final output = StringBuffer();
+    for (final match in RegExp(r'\S+').allMatches(raw)) {
+      if (runs.isNotEmpty) output.write(' ');
+      runs.add((
+        rawStart: match.start,
+        rawEnd: match.end,
+        start: output.length,
+      ));
+      output.write(match.group(0)!);
+    }
+    text = output.toString();
+  }
+
+  int startOffset(int raw) {
+    var low = 0, high = runs.length;
+    while (low < high) {
+      final mid = (low + high) ~/ 2;
+      if (runs[mid].rawEnd <= raw) {
+        low = mid + 1;
+      } else {
+        high = mid;
+      }
+    }
+    if (low == runs.length) return text.length;
+    final run = runs[low];
+    return run.start + (raw - run.rawStart).clamp(0, run.rawEnd - run.rawStart);
+  }
+
+  int endOffset(int raw) {
+    var low = 0, high = runs.length;
+    while (low < high) {
+      final mid = (low + high) ~/ 2;
+      if (runs[mid].rawStart < raw) {
+        low = mid + 1;
+      } else {
+        high = mid;
+      }
+    }
+    if (low == 0) return 0;
+    final run = runs[low - 1];
+    return run.start + (raw - run.rawStart).clamp(0, run.rawEnd - run.rawStart);
+  }
+}
+
 class _Blocks {
   final _Epub book;
   final String path;
   String buffer = '';
   bool heading = false;
+  final rawAnchors = <({String key, int offset})>[];
+  final activeLinks = <_TextLink>[];
+  final closedLinks = <_TextLink>[];
   _Blocks(this.book, this.path);
   void flush() {
-    final value = clean(buffer);
-    if (value.isNotEmpty) book.blocks.add(BookBlock(value, heading: heading));
+    final normalized = _NormalizedText(buffer);
+    final index = book.blocks.length;
+    for (final anchor in rawAnchors) {
+      book.anchors.putIfAbsent(
+        anchor.key,
+        () =>
+            BookPosition(index, offset: normalized.startOffset(anchor.offset)),
+      );
+    }
+    if (normalized.text.isNotEmpty) {
+      book.blocks.add(BookBlock(normalized.text, heading: heading));
+      for (final link in [...closedLinks, ...activeLinks]) {
+        final start = normalized.startOffset(link.start);
+        final end = normalized.endOffset(link.end ?? buffer.length);
+        if (end > start) {
+          book.pendingLinks.add(
+            _PendingLink(path, index, start, end, link.href, link.kind),
+          );
+        }
+      }
+    }
     buffer = '';
+    rawAnchors.clear();
+    closedLinks.clear();
+    for (final link in activeLinks) {
+      link.start = 0;
+    }
   }
 
   // Both HTML images and simple SVG wrappers use the same bounded local loader.
@@ -354,7 +506,11 @@ class _Blocks {
       return;
     }
     if (image.id.isNotEmpty) {
-      book.targets['$path#${image.id}'] = book.blocks.length;
+      book.targets.putIfAbsent('$path#${image.id}', () => book.blocks.length);
+      book.anchors.putIfAbsent(
+        '$path#${image.id}',
+        () => BookPosition(book.blocks.length),
+      );
     }
     final title = clean(
       svg.children
@@ -414,7 +570,30 @@ class _Blocks {
     }.contains(tag);
     if (block) flush();
     final id = node.id;
-    if (id.isNotEmpty) book.targets['$path#$id'] = book.blocks.length;
+    if (id.isNotEmpty) {
+      book.targets.putIfAbsent('$path#$id', () => book.blocks.length);
+      if (tag == 'img' || tag == 'svg' || tag == 'table') {
+        book.anchors.putIfAbsent(
+          '$path#$id',
+          () => BookPosition(book.blocks.length),
+        );
+      } else {
+        rawAnchors.add((key: '$path#$id', offset: buffer.length));
+      }
+    }
+    _TextLink? opened;
+    if (tag == 'a' && node.attributes.containsKey('href')) {
+      final semantics =
+          '${node.attributes['epub:type'] ?? ''} ${node.attributes['role'] ?? ''}'
+              .split(RegExp(r'\s+'));
+      final kind = semantics.any((s) => s == 'noteref' || s == 'doc-noteref')
+          ? BookLinkKind.noteref
+          : semantics.any((s) => s == 'backlink' || s == 'doc-backlink')
+          ? BookLinkKind.backlink
+          : BookLinkKind.link;
+      opened = _TextLink(node.attributes['href']!, kind, buffer.length);
+      activeLinks.add(opened);
+    }
     final wasHeading = heading;
     heading =
         const {'h1', 'h2', 'h3', 'h4', 'h5', 'h6'}.contains(tag) || heading;
@@ -471,6 +650,11 @@ class _Blocks {
       for (final child in node.nodes) {
         walk(child);
       }
+    }
+    if (opened != null) {
+      activeLinks.remove(opened);
+      opened.end = buffer.length;
+      closedLinks.add(opened);
     }
     if (block) flush();
     heading = wasHeading;
