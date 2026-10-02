@@ -1,36 +1,36 @@
 # Reading 最新小步骤交接
 
-更新：2026-10-01。安卓原生 EPUB 样本验收已获用户确认“四项全部正常”，本轮关闭此项。开工 HEAD `cac2ed4` 且工作区干净；应用功能检查点仍为 `18fae5b`，没有应用代码改动。
+更新：2026-10-02。恢复 limit 中断后的 iPhone 原生 EPUB 验收。HEAD `76b8fd3`，上轮仅 `HANDOFF-WIP.md` 有未提交断点；应用代码无变化。安卓四项已由用户实测通过，不重复验收。
 
 ## Current Goal
 
-收齐安卓 `reading-lesson.epub` 原生导入的四项用户实测结果，关闭该验收项并交接下一步。本轮不展开 iPhone、脚注或分页。
+完成 iPhone 原生 EPUB 样本导入及图片/表格、点词停留、目录和重开位置验收。本轮只做这一项。
 
 ## Completed
 
-- 已读取最新交接、项目规则、整体计划和专项验收记录，核对源码导入入口仍允许 TXT/EPUB。
-- 只读核实 `emulator-5554` 在线，`dev.reading.reading_app` 已安装且进程存在，样本在 Downloads（2695 bytes）。宿主/设备 SHA-256 一致。
-- CUA 重新枚举仍未列出模拟器；通过实际进程路径以及 `Android Emulator` 名称连接均返回 `Invalid app`。可连接 Android Studio，已观察到 Device Manager 中 Reader Phone 在线。
-- 用户针对完整四项操作明确回复“四项全部正常”：系统选择导入、图片/表格、Tomorrow 气泡停留、Second lesson 跳转后返回书架重开恢复。已同步专项验收表、主交接及执行计划。
+- 核对 Git、交接和当前 Device Hub：iPhone Safari 确实停在“Do you want to download reading-lesson.epub?”确认框。
+- 确认原本机样本服务器仍在，`127.0.0.1:8765/reading-lesson.epub` 经获批终端请求返回 HTTP 200，监听进程 Python PID 86345。首次非提权 curl 的 000 不代表服务停机；尝试重启遇到端口占用，没有启动第二个服务。
+- CUA 可读取/截图，但点击 Download 坐标返回 `noWindowsAvailable`。已请求用户点击 Download，再通过 Reading 系统选择器从 Files/Downloads 选样本。
+- 目前等待用户反馈能否进入正文；尚未证明下载保存或原生导入成功。没有重装、改应用代码、改系统设置或写业务数据库。
 
 ## Verification
 
-- 前一轮环境检查通过：设备在线、应用包/进程存在；本地与安卓样本 SHA-256 均为 `724fb95af485d48e53d306fe0930702f1eb3450adb17e638b94fc8b469c72928`。没有重装、清空、修改应用数据或启动会卸载 App 的测试。
-- 前一轮 CUA 直接观察到 Device Manager 的 Reader Phone（Android 16/API 36）在线。原生导入行为由本轮用户实测确认，非代理自动 UI 验证。
-- 本轮用户实测通过：系统选择器实际导入、图片/表格、Tomorrow 释义停留几秒不消失、Second lesson 跳转及返回书架重开仍在第二章。证据为用户对四项验收问题的原话“四项全部正常”，覆盖这一份样本，不外推到所有 EPUB。
-- 本轮只更新验收文档，检查八项结构、状态一致性与差异；不重跑此前已通过的 28 项应用测试/构建。
+- 本轮直接观察：Safari 下载提示，文件名为 `reading-lesson.epub`；本机服务 HTTP 200，监听在回环地址。
+- 本轮工具失败：CUA 点击下载按钮返回 `noWindowsAvailable`。不能据此判断 Reading 导入失败。
+- 待验证：文件保存、原生导入、图片/表格、Tomorrow 释义停留、Second lesson 跳转及返回书架重开恢复。
+- 历史应用验证和安卓用户实测见下节，本轮不重跑无关测试/构建。
 
 ## Current Project State
 
 **已验证（检查点 18fae5b）**：28/28 宿主测试通过；静态分析无问题；iOS/Android debug 构建通过。组件测试覆盖手机 430×1000、平板横屏 1180×820 的导入、图片、表格点词、目录和重开位置。iPhone 升级前后核对原有 1 本书的 ID、位置、样式及设置均保留；CUA 看到了新导入入口。Android 覆盖安装返回 Success，样本已传入下载目录，应用已启动。
 
-**本轮新增验证**：安卓原生 EPUB 样本四项流程用户实测通过。
+**历史用户实测**：安卓原生 EPUB 样本四项流程通过（2026-10-01）。
 
 **未经验证**：iPhone 从原生文件选择器实际选取 EPUB 的端到端流程、用户真实教材/大书兼容性、iPad 模拟器和真机。平板尺寸组件测试不等同于 iPad 设备验收。阶段 2 原生 TXT 导入及部分气泡/主题/系统栏视觉验收仍保留。
 
 **尚未完成**：左右翻页、必做 iPad 横屏双页、脚注跳转、真实句子翻译、生词本、书签/正文搜索、备份等阶段 3 后续功能。
 
-安卓此项验收已关闭，没有待答的安卓验收问题。本轮未启动 build/test/attach，未操作设备或书架；只有交接/验收文档更新。下一轮用 Git 状态核对，不依赖历史 PID。
+安卓验收已关闭；本轮 iPhone 仍在样本准备阶段。没有运行中的 build/test/attach，但上轮样本下载服务器仍存活（PID 86345，历史 exec session 58924）。服务暂留供用户完成已经请求的下载；确认样本已保存后立即停止。可向仍有效的 exec session 58924 发送 Ctrl-C；若会话失效，只在核对 PID/监听端口仍属该进程后终止。其余无运行任务，本轮文档以单独检查点提交。
 
 ## Key Decisions / Context
 
@@ -83,12 +83,12 @@ READING_PROXY_URL='' ../scripts/flutterw test --no-pub --reporter expanded
 
 ## Next Step
 
-**唯一优先步骤：完成 iPhone 正常应用的一份 EPUB 原生导入验收，并记录真实结果。**
+**唯一优先步骤：接上用户协助的 iPhone 原生 EPUB 导入验收。**
 
-- 先读本交接、核对 Git 与 `docs/epub-acceptance.md`，通过 CUA 观察 Device Hub 当前 iPhone 状态。设备 UDID 和 bundle 见 Key Decisions / Context；有用户书架，禁止卸载或运行 `flutter test -d`。
-- 先确认 iPhone 的 Files 能访问样本；安卓 Downloads 的文件不会自动出现在 iPhone。宿主样本为 `/Users/tty/Desktop/Coding/Reading/app/test/fixtures/epub/lesson-epub3.epub`。如 Files 内没有样本，使用正常文件传输路径准备，必要时请求用户协助保存到 Files；未准备好时记录准确阻塞，不虚构已经传入。
-- 在 Reading → 添加书籍 → 导入 EPUB / TXT，用系统选择器选这份样本。核对正文、图片/表格、Tomorrow 气泡保持；目录选择 Second lesson，返回书架后重开仍在第二章。
-- 四项均确认后更新专项验收表与八项交接，区分代理直接观察和用户反馈；若失败，保存具体步骤/现象作为下一轮修复依据。结束该周期，不顺带开始真实教材、脚注或分页。
+- 已发送一个待答问题，请用户点击 Safari Download，再 Reading → 添加书籍 → 导入 EPUB / TXT → 浏览 → 我的 iPhone → Downloads → reading-lesson.epub，并反馈是否进入正文。先读取回复，不重复发同一问题。
+- 进入正文后，仅核验图片/表格、Tomorrow 释义保持、目录 Second lesson 跳转、返回书架重开仍在第二章。能直接操作则使用 CUA；否则请求用户反馈这三个剩余结果，区分用户实测与自动化。
+- 若找不到文件或失败，记录准确步骤及报错，不展开无关功能；不通过直接注入数据库绕过原生选择器。
+- 确认下载已保存后停止本机样本服务器并核对端口关闭；等待用户下载期间暂留服务，不让提供给用户的下载地址失效。随后更新八项交接/专项验收并提交。本轮不进入脚注/分页。
 
 ## Remaining Plan
 

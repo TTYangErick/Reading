@@ -27,6 +27,20 @@ CUA 可读 Device Manager 中在线 Reader Phone，但独立模拟器无法绑�
 | 点词 | Tomorrow 释义停留几秒不自动消失 | 用户实测通过 |
 | 目录/位置 | Second lesson → 返回书架 → 重开仍在第二章 | 用户实测通过 |
 
+## iPhone 原生验收进行中（2026-10-02）
+
+恢复上轮中断后，直接观察到 Safari 停在 `reading-lesson.epub` 下载确认框；本机样本下载服务 HTTP 200。CUA 点击 Download 返回 `noWindowsAvailable`，已请求用户通过正常下载和 Reading 文件选择入口协助。
+
+| 检查 | 当前结果 | 来源 |
+|---|---|---|
+| Safari 下载提示/样本服务 | 提示存在，HTTP 200；不等于保存成功 | 代理直接观察/终端只读检查 |
+| 保存到 Files 并原生导入 | 待反馈 | 已询问用户 |
+| 图片/简单表格 | 尚未验收 | 待导入后核验 |
+| Tomorrow 气泡保持 | 尚未验收 | 待导入后核验 |
+| Second lesson 跳转及重开位置 | 尚未验收 | 待导入后核验 |
+
+未改应用代码，没有重装或清空书架；暂不将 iPhone 原生导入标为通过。下载结束需关闭临时回环服务，状态见 `HANDOFF-WIP.md`。
+
 ## 自动验证
 
 `app/test/epub_test.dart`：EPUB 2/3、spine 与 manifest 顺序不同、嵌套目录与片段定位、图片带空格路径、表格、旧 JSON、旧库升级及关闭重开、图片删除清理、损坏/越界/伪造解压大小/DRM/固定版式、缺图占位、合并单元格明确降级。
