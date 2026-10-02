@@ -47,8 +47,9 @@ dart run tool/inspect_epub.dart '/Users/tty/Downloads/Harry Potter and the Chamb
 ## SVG 封面修复进度（2026-10-02）
 
 - `_Blocks.addSvgImage` 支持直接单 image 与可选纯文本 title/desc，识别 `href` / namespaced `xlink:href`；复用 `addImage` 与既有路径、格式、解压上限及 CRC 校验。复杂 SVG 显示占位，不作通用 SVG 渲染，无新增依赖。
-- 新增 4 项回归先在旧代码失败、修复后通过；全量宿主 32/32 通过，`flutter analyze` 无问题，iOS 模拟器 debug 构建通过。用户提醒 limit 后优先保存，安卓构建未执行。
+- 新增 4 项回归先在旧代码失败、修复后通过；全量宿主 32/32 通过，`flutter analyze` 无问题，iOS 模拟器 debug 构建通过；上轮因 limit 留下的安卓 debug 构建现已补齐，assembleDebug 16.8s，退出码 0。两端构建均通过。
 - 本书重新解析得到 3,180 块、2 张图片；`cover_image.jpg` 100,523 bytes 和 `Cover.jpg` 124,594 bytes 均提取。3,178 个文字块及顺序与旧指纹完全一致；17 个目录目标统一 +1 正确，JSON 往返一致。新第 15 章索引 2452；原 NCX 缺项未修补。
 - 证据在忽略的 `artifacts/real-epub-audit-svg-fixed.json`；修复前证据保留。单次本机解析 125 ms，不外推设备性能。
-- 未自动重解析旧书，旧书位置不变；新导入才包含新图片。两端已安装 App 未更新，旧安卓 APK 不含本次修复，封面原生视觉尚未验收。上方用户“全部正常”是修复前的阅读验收。
-- 下一轮只完成安卓构建及工程交付记录，之后再进入脚注解析模型。
+- 未自动重解析旧书，旧书位置不变；新导入才包含新图片。两端已安装 App 未更新，新安卓 APK 已包含修复，封面原生视觉尚未验收。上方用户“全部正常”是修复前的阅读验收。
+- 安卓构建证据：`artifacts/svg-android-build.json`，来源提交 `7cb9967`，APK 247,039,777 bytes，SHA-256 `87fab7708d785d1e9fca5a01981952c1a031f7baaae9e86d07b222036c7ec79f`。Java/SDK XML 提示非阻断，环境未改动。
+- 工程验证记录已补齐；下一轮只做脚注链接/锚点解析模型。

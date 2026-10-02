@@ -1,39 +1,36 @@
 # Reading 最新小步骤交接
 
-更新：2026-10-02。本轮起点 `577577c`；目标仅 SVG 包裹本地栅格封面的兼容修复。代码已修复，测试/分析及 iOS 构建通过。用户提醒接近 limit，主动收口保存；安卓构建未执行，不开始后续模块。
+更新：2026-10-02。本轮起点 `7cb9967`，工作区核对干净，应用源码无变化。本轮仅完成之前因 limit 留下的安卓构建核验和交接同步。
 
 ## Current Goal
 
-修复简单 SVG 图片包装被静默跳过的问题，保留现有图片安全加载、正文顺序、目录定位和已保存的书架数据。本轮不做目录补全、脚注或分页。
+补完 SVG 栅格封面修复的安卓 debug 构建，关闭该修复的工程验证记录；不展开脚注、分页或设备安装。
 
 ## Completed
 
-- `app/lib/book/epub.dart`：抽取 `_Blocks.addImage`，让普通 `img` 和 SVG 图片复用同一个本地资源加载流程。
-- 新增 `_Blocks.addSvgImage`：支持 SVG 直接包含一张栅格 `image` 及可选纯文本 title/desc，兼容 `href` 和 namespaced `xlink:href`（`href` 优先）。保留 SVG 与 image 的 ID 目录定位。
-- 对多图、矢量路径、脚本/foreignObject、变换/滤镜/蒙版等非简单包装输出一条可见占位，不做部分 SVG 渲染、不执行内容、不联网。SVG 自身按独立块处理，避免前后正文混在一起。
-- 新增 4 个回归测试，覆盖两类链接、图像/前后段落顺序、目录锚点、资源入库/读取、缺图、外链/data URI、越界路径、复杂图形降级。
-- 重新解析用户真实 EPUB：两张 JPEG 均被提取；3,178 个文字块与修复前逐块一致；17 项目录目标均正确偏移一块。
+- 使用 `scripts/flutterw` 默认代理正常构建 Android debug APK，构建退出码 0。
+- 新 APK 已包含 `7cb9967` 的 SVG 封面修复；两端构建验证至此完成。没有更新或卸载模拟器应用，没有改动书架。
+- 产物证据保存于忽略目录 `artifacts/svg-android-build.json`，包含来源提交、命令、大小、SHA-256、未安装标记及工具链警告。
+- 同步主交接、计划与两份 EPUB 验收文档；下一轮唯一任务设为脚注链接/锚点解析模型。
 
 ## Verification
 
-- 红灯验证：4 个新增 SVG 测试在旧代码全部失败，确实复现遗漏及无占位；修复后 `test/epub_test.dart` 13/13 通过。
-- 全部宿主测试：32/32 通过（含 EPUB/TXT 导入、图片/表格、点词与重开、旧 JSON/数据库迁移及边界检查）。未运行设备测试，未卸载 App。
-- `flutter analyze`：No issues found；格式检查与 `git diff --check` 通过。
-- 用户真实书：3,180 块 = 3,178 文字 + 2 图片；`cover_image.jpg` 100,523 bytes、`Cover.jpg` 124,594 bytes。文字指纹及顺序与历史核验完全相同；全部目录块索引比旧版 +1，JSON 往返一致，无越界目标。本机单次解析 125 ms，不外推手机性能。
-- iOS 模拟器 debug 构建已通过（session 65843 已结束，Xcode build 9.9s），产物 `app/build/ios/iphonesimulator/Runner.app`。安卓 debug 构建尚未执行；用户提醒 limit 后优先保存，旧 APK 仍是修复前版本。
-- 尚未把新构建覆盖安装到模拟器；本次封面的原生视觉专项验收未做。此前真实书安卓“全部正常”和两端样本验收属于修复前版本，不能冒充本次封面视觉结果。
+- **本轮新增**：在 `app/` 执行 `../scripts/flutterw build apk --debug --no-pub` 成功，Gradle assembleDebug 16.8s；session 71469 已结束。
+- APK：`app/build/app/outputs/flutter-apk/app-debug.apk`，247,039,777 bytes；SHA-256 `87fab7708d785d1e9fca5a01981952c1a031f7baaae9e86d07b222036c7ec79f`。
+- 构建出现 Java native-access 和 SDK XML 版本提示，均非阻断；本轮没有为警告更改环境或依赖。
+- **沿用上一轮证据，未重复执行**：`7cb9967` 的 32/32 宿主测试、静态分析、iOS 模拟器 debug 构建通过；真实书 3,178 个文字块保持原顺序，提取两张图片，17 项目录目标正确 +1，JSON 往返一致。
+- Git 核对应用源码/测试与 `7cb9967` 一致。本轮只有文档变更，按规则不重跑已通过且不受影响的测试/iOS 构建。
+- **未验证**：新封面的原生视觉；两端模拟器已安装 App 未更新。历史用户“全部正常”指修复前真实书阅读，不是这次新封面验收。
 
 ## Current Project State
 
-阶段 2 主体、阶段 3 EPUB 基础版已实现。本轮 SVG 单张栅格封面兼容已实现且解析/持久化回归通过；设备端新封面视觉尚未验证。修复不改数据库 schema 或存量正文，旧书位置保持原样；只有新导入书会提取新增封面。
+阶段 2 主体、阶段 3 EPUB 基础版已实现；SVG 简单单张栅格封面修复已通过解析/持久化测试、静态分析和双平台构建。旧库不重解析，原位置保留；新导入才增加封面块。
 
-用户真实小说安卓普通导入/阅读/点词/重开曾用户实测通过；原 NCX 缺第 15 章仍保留。iPhone 这本书、真实教材、大书/iPad 设备均未验收。iPad 只有通用工程和宽屏组件测试，左右翻页及必做横屏双页未实现。
+安卓真实小说基础阅读曾获用户实测通过；iPhone/安卓原创样本也通过。原 NCX 漏第 15 章未补全，正文不缺。iPhone 本真实书、真实教材、大书、iPad 设备未验收。iPad 仅通用工程/宽屏组件测试，左右翻页与横屏双页未实现。
 
-当前没有运行中的 build/test/attach/下载服务，无业务数据库注入。原 EPUB 在用户 Downloads，安卓副本 `/sdcard/Download/reading-real-book.epub`。旧服务器 8765 已停止，勿重复清理历史 PID。
+当前无运行中的 build/test/attach/下载服务。原 EPUB 保留在用户 Downloads，安卓副本 `/sdcard/Download/reading-real-book.epub`。无数据库注入，不重新启动旧样本服务器。
 
 ## Key Decisions / Context
-
-
 
 **工作方式调整**：此前 Next Step 混合多端验收、脚注和分页；依用户新要求改为一个周期一个目标，其余放入 Remaining Plan，防止额度/上下文中断时遗留大范围未验证修改。
 
@@ -62,8 +59,8 @@
 - iPhone UDID `144FF884-EC04-4E7F-9BE6-AFF8264E8699`，bundle `dev.reading.readingApp`；UI 宿主 Device Hub `com.apple.dt.Devices`。
 - Android SDK `/Users/tty/Library/Android/sdk`，设备 `emulator-5554`，包名 `dev.reading.reading_app`；样本 `/sdcard/Download/reading-lesson.epub`。不要并行对同设备 run/test。
 - 真实 ECDICT 数据库在 `app/assets/dictionaries/ecdict.sqlite`（Git 忽略）；不要删除后直接构建。仅缺失时用 `scripts/fetch_assets.py` 和 `dict_builder/build_ecdict.py` 重建。770,611 词条；不是原型示例词典。
-- 最近构建产物：`app/build/ios/iphonesimulator/Runner.app` 已含本轮 SVG 修复；`app/build/app/outputs/flutter-apk/app-debug.apk` 仍是旧 EPUB 基础版。两端已安装 App 都未更新。升级前后 iPhone 比对资料在忽略的 `artifacts/epub-upgrade-state.json`。
-- 本轮修改解析器，测试/分析通过；构建结果见 Verification（iOS 通过、Android 待执行）。复查命令：
+- 最近构建产物：`app/build/ios/iphonesimulator/Runner.app` 已含本轮 SVG 修复；`app/build/app/outputs/flutter-apk/app-debug.apk` 本轮已构建，包含 SVG 修复。两端已安装 App 都未更新。升级前后 iPhone 比对资料在忽略的 `artifacts/epub-upgrade-state.json`。
+- 解析器在 `7cb9967` 修复，测试/分析已通过；本轮仅补安卓构建，两端构建均通过。复查命令：
 
 ```sh
 cd /Users/tty/Desktop/Coding/Reading/app
@@ -82,7 +79,7 @@ READING_PROXY_URL='' ../scripts/flutterw test --no-pub --reporter expanded
 - 小说没有表格，不将本次验证描述为真实教材验收完成。
 
 
-本轮实现决定：
+SVG 修复实现决定（7cb9967）：
 - 这是栅格图片提取，不是 SVG 渲染。仅允许直接单 image 和纯文本 title/desc；尺寸由既有阅读器图片布局处理，不复刻 SVG 坐标/原 CSS。没有引入新依赖。
 - HTML 包将 `xlink:href` 存为 `dom.AttributeName`，不能简单用字符串 key 读取，见 `addSvgImage`。
 - 复用 `addImage` → `_Epub.resolve/data` 保持路径限制、解压上限与 CRC；外链只生成占位，不发请求。
@@ -96,19 +93,20 @@ READING_PROXY_URL='' ../scripts/flutterw test --no-pub --reporter expanded
 - 原 NCX 漏第 15 章，正文不缺；目录补全需独立设计去重/顺序，不能硬编码本书。
 - 安卓 CUA 无法绑定独立模拟器；用户此前可协助验收。iPhone/iPad/真机本次新封面视觉未验证。
 - 分页/双页、脚注交互、真实翻译、生词本、书签/搜索/备份仍未完成；阶段 2 部分视觉/TXT 原生导入验收保留。
+- 构建的 Java/SDK XML 兼容提示已记录，当前不阻塞；将来工具链升级时再统一处理，不为通过的构建扩张本轮工作。
 
 ## Next Step
 
-**唯一优先步骤：完成本轮 SVG 修复的安卓构建核验并关闭工程交付记录。**
+**唯一优先步骤：实现脚注链接/锚点解析与向后兼容的数据模型，不接阅读器 UI。**
 
-1. 读取本交接，确认工作区与本轮提交一致。32/32 测试、静态分析和 iOS 构建已有通过证据，无新修改/故障时无需重跑。
-2. 在 `/Users/tty/Desktop/Coding/Reading/app` 执行 `../scripts/flutterw build apk --debug --no-pub`（默认代理；SDK/Gradle 缓存写入需正常提权）。成功产物 `build/app/outputs/flutter-apk/app-debug.apk`，记录实际结果。
-3. 成功后更新交接/计划为双平台构建通过；下一轮唯一任务再设为脚注链接/锚点解析模型。若失败，只定位本次构建失败，不展开脚注或分页；保存具体错误和恢复命令。
-4. 新封面原生视觉仍待验收，构建不等于已安装或已实测。后续正常覆盖升级后另行导入一份检查，保留旧书/进度；不要在用户设备运行 `flutter test -d`。
+1. 读取 `app/lib/book/book.dart` 的 `BookContent`/`BookBlock` JSON 与 `app/lib/book/epub.dart` 的 `_Epub.targets`、`_Blocks.walk`。先限定支持的行内文本链接、章内/跨章目标和返回链接表示，不提前实现跳转界面。
+2. 定义链接文本范围和目标位置，保留 EPUB ID/路径映射；空白规范化后链接偏移必须匹配最终正文。旧 TXT/EPUB JSON 缺少新字段时正常读取。
+3. 用原创 EPUB 2/3 夹具验证章内/跨章脚注、返回链接、空白/行内标签、缺失目标、外链和重复 ID；外链不联网。兼顾 `linear=no` 脚注资源可能未进入正文的问题，先记录/限定支持方式，不悄悄丢失目标或改动原章节顺序。
+4. 运行针对模型、解析器、旧书读取的测试及必要分析/构建，明确脚注 UI 未实现；若模型范围过大先拆小并保存，不同轮展开跳转、返回、分页。
 
 ## Remaining Plan
 
-1. 当前先补安卓构建；随后脚注先模型/解析（`book.dart` 向后兼容的链接范围/目标结构，`epub.dart` 章内/跨章锚点与空白规范化位置测试），再下一周期接阅读器跳转与返回；原目录缺项补全独立排队。新版 SVG 封面原生视觉在正常升级后补验收，旧书不自动重解析。
-2. 分页依次位置映射/文字分页、图片表格、手机翻页与恢复；随后 iPad 横屏双页，再独立模拟器/真机验收。
-3. 阶段 3 其余：真实翻译/缓存、Wiktionary、生词本/导出、书签/正文搜索、备份、真机；保留阶段 2 未关闭验收。
-4. 阶段 4 MDX/MDD/PDF，阶段 5 可选同步/多语言未开始。总体需求见 `PLAN.md` 和 `docs/original-plan.md`。
+1. 脚注模型/解析之后，下一独立周期接阅读器跳转及返回并回归位置恢复。目录缺项补全独立排队；新版封面视觉在正常覆盖升级后另行导入一份验收，保留旧书/进度。
+2. 分页依次位置映射/文字分页、图片表格、手机翻页与恢复；随后必做 iPad 横屏双页，再独立模拟器/真机验收。
+3. 阶段 3 其余：真实翻译/缓存、Wiktionary、生词本/导出、书签/正文搜索、备份、真机；阶段 2 剩余视觉/TXT 原生导入验收保留。
+4. 阶段 4 MDX/MDD/PDF、阶段 5 可选同步/多语言均未开始。总体计划见 `PLAN.md` / `docs/original-plan.md`。
