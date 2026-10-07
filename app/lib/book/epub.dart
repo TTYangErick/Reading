@@ -13,6 +13,12 @@ import 'book.dart';
 /// Reflowable EPUB 2/3. Book resources stay local and are never executed.
 class EpubParser implements BookParser {
   static const maxFileSize = 50 * 1024 * 1024;
+  static const maxSupplementaryDocuments = 64;
+  static const maxSupplementaryDocumentBytes = 1024 * 1024;
+  // Includes newly loaded images; shared body assets are not counted twice.
+  static const maxSupplementaryBytes = 8 * 1024 * 1024;
+  static const maxSupplementaryReferences = 4096;
+  static const maxSupplementaryDepth = 8;
   @override
   Set<String> get extensions => {'epub'};
   @override
@@ -56,6 +62,10 @@ class _Epub {
   final documents = <String>{};
   final assets = <String, Uint8List>{};
   final chapters = <BookChapter>[];
+  final supplementaryDocuments = <String, List<BookBlock>>{};
+  final supplementaryDepth = <String, int>{};
+  final supplementaryResources = <String>{};
+  var supplementaryBytes = 0;
   _Epub(Uint8List bytes) {
     final directory = zip.ZipDirectory()..read(zip.InputMemoryStream(bytes));
     if (directory.fileHeaders.isEmpty || directory.fileHeaders.length > 10000) {
@@ -190,18 +200,7 @@ class _Epub {
       final path = resolve(opfPath, item.getAttribute('href')!);
       if (!seen.add(path)) continue;
       targets[path] = blocks.length;
-      documents.add(path);
-      anchors[path] = BookPosition(blocks.length);
-      final document = html.parse(text(path));
-      final walker = _Blocks(this, path);
-      walker.walk(document.body!);
-      walker.flush();
-      // An empty trailing anchor must not silently point into the next chapter.
-      anchors.removeWhere(
-        (key, value) =>
-            (key == path || key.startsWith('$path#')) &&
-            value.block >= blocks.length,
-      );
+      readDocument(path, blocks);
     }
     if (blocks.isEmpty) throw const FormatException('EPUB 没有可阅读的正文。');
     final nav = manifest.values
@@ -274,6 +273,18 @@ class _Epub {
         }
       }
     }
+    final fixedItems = elements(spine, 'itemref')
+        .where(
+          (e) => (e.getAttribute('properties') ?? '')
+              .split(RegExp(r'\s+'))
+              .contains('rendition:layout-pre-paginated'),
+        )
+        .map((e) => e.getAttribute('idref'))
+        .toSet();
+    readSupplementaryDocuments(
+      opfPath,
+      manifest.values.where((e) => !fixedItems.contains(e.getAttribute('id'))),
+    );
     return BookContent(
       blocks,
       format: 'epub',
@@ -281,8 +292,103 @@ class _Epub {
       chapters: chapters,
       links: pendingLinks.map(resolveLink).toList(),
       anchors: anchors,
+      supplementaryDocuments: supplementaryDocuments,
       title: elements(opf, 'title').firstOrNull?.innerText.trim(),
     );
+  }
+
+  void readDocument(String path, List<BookBlock> output, {String? document}) {
+    documents.add(path);
+    anchors[path] = BookPosition(output.length, document: document);
+    final walker = _Blocks(this, path, output, document: document);
+    walker.walk(html.parse(text(path)).body!);
+    walker.flush();
+    // A terminal empty anchor cannot point into another document/block space.
+    anchors.removeWhere(
+      (key, value) =>
+          (key == path || key.startsWith('$path#')) &&
+          value.block >= output.length,
+    );
+  }
+
+  bool reserveSupplementaryResource(String path) {
+    if (assets.containsKey(path) || supplementaryResources.contains(path)) {
+      return true;
+    }
+    final size = files[path]?.uncompressedSize;
+    if (size == null ||
+        supplementaryBytes + size > EpubParser.maxSupplementaryBytes) {
+      return false;
+    }
+    supplementaryResources.add(path);
+    supplementaryBytes += size;
+    return true;
+  }
+
+  void readSupplementaryDocuments(
+    String opfPath,
+    Iterable<XmlElement> manifest,
+  ) {
+    final eligible = <String>{};
+    for (final item in manifest) {
+      if (!const {
+        'application/xhtml+xml',
+        'text/html',
+      }.contains(item.getAttribute('media-type'))) {
+        continue;
+      }
+      final href = item.getAttribute('href');
+      if (href == null) continue;
+      try {
+        final uri = linkUri(href);
+        if (uri.hasScheme || uri.hasAuthority || uri.hasQuery) continue;
+        eligible.add(resolve(opfPath, href));
+      } on FormatException {
+        // An unused/unsupported manifest entry must not block the body.
+      }
+    }
+    final visited = <String>{...documents};
+    // Links are appended by each document, giving a bounded breadth-first walk.
+    // Include ordinary EPUB 2 links: footnote semantics are often absent.
+    for (
+      var i = 0;
+      i < pendingLinks.length && i < EpubParser.maxSupplementaryReferences;
+      i++
+    ) {
+      final link = pendingLinks[i];
+      final depth = (supplementaryDepth[link.path] ?? 0) + 1;
+      if (depth > EpubParser.maxSupplementaryDepth) continue;
+      String path;
+      try {
+        final uri = linkUri(link.href);
+        if (uri.hasScheme || uri.hasAuthority || uri.hasQuery) continue;
+        // Validate the fragment too, consistently with final link resolution.
+        Uri.decodeComponent(uri.fragment);
+        path = resolve(link.path, link.href);
+      } on FormatException {
+        continue;
+      }
+      if (!eligible.contains(path) || !visited.add(path)) continue;
+      final size = files[path]?.uncompressedSize;
+      if (size == null ||
+          size > EpubParser.maxSupplementaryDocumentBytes ||
+          supplementaryDocuments.length >=
+              EpubParser.maxSupplementaryDocuments ||
+          !reserveSupplementaryResource(path)) {
+        continue;
+      }
+      final output = <BookBlock>[];
+      supplementaryDocuments[path] = output;
+      supplementaryDepth[path] = depth;
+      readDocument(path, output, document: path);
+    }
+  }
+
+  Uri linkUri(String href) {
+    if (RegExp(r'%(?![0-9a-fA-F]{2})').hasMatch(href)) {
+      throw const FormatException('Invalid link escape');
+    }
+    return Uri.parse(href);
   }
 
   BookLink resolveLink(_PendingLink link) {
@@ -290,10 +396,7 @@ class _Epub {
     String? key;
     BookPosition? target;
     try {
-      if (RegExp(r'%(?![0-9a-fA-F]{2})').hasMatch(link.href)) {
-        throw const FormatException('Invalid link escape');
-      }
-      final uri = Uri.parse(link.href);
+      final uri = linkUri(link.href);
       if (uri.hasScheme || uri.hasAuthority) {
         status = BookLinkStatus.external;
       } else if (!uri.hasQuery) {
@@ -315,6 +418,9 @@ class _Epub {
       // A bad link is non-actionable; it must not prevent reading the chapter.
     }
     return BookLink(
+      document: supplementaryDocuments.containsKey(link.path)
+          ? link.path
+          : null,
       block: link.block,
       start: link.start,
       end: link.end,
@@ -415,24 +521,33 @@ class _NormalizedText {
 class _Blocks {
   final _Epub book;
   final String path;
+  final List<BookBlock> blocks;
+  final String? document;
   String buffer = '';
   bool heading = false;
   final rawAnchors = <({String key, int offset})>[];
   final activeLinks = <_TextLink>[];
   final closedLinks = <_TextLink>[];
-  _Blocks(this.book, this.path);
+  _Blocks(this.book, this.path, this.blocks, {this.document});
+
+  BookPosition position(int block, {int offset = 0}) =>
+      BookPosition(block, offset: offset, document: document);
+
+  void addTarget(String key) {
+    if (document == null) book.targets.putIfAbsent(key, () => blocks.length);
+  }
+
   void flush() {
     final normalized = _NormalizedText(buffer);
-    final index = book.blocks.length;
+    final index = blocks.length;
     for (final anchor in rawAnchors) {
       book.anchors.putIfAbsent(
         anchor.key,
-        () =>
-            BookPosition(index, offset: normalized.startOffset(anchor.offset)),
+        () => position(index, offset: normalized.startOffset(anchor.offset)),
       );
     }
     if (normalized.text.isNotEmpty) {
-      book.blocks.add(BookBlock(normalized.text, heading: heading));
+      blocks.add(BookBlock(normalized.text, heading: heading));
       for (final link in [...closedLinks, ...activeLinks]) {
         final start = normalized.startOffset(link.start);
         final end = normalized.endOffset(link.end ?? buffer.length);
@@ -461,13 +576,17 @@ class _Blocks {
         const {'.png', '.jpg', '.jpeg', '.gif', '.webp'}.contains(extension)) {
       final resource = book.resolve(path, src);
       if (book.files.containsKey(resource)) {
-        book.assets[resource] = book.data(resource);
-        book.blocks.add(BookBlock(alt, image: resource));
+        if (document != null && !book.reserveSupplementaryResource(resource)) {
+          blocks.add(BookBlock('[$alt：补充资源超出限额]'));
+        } else {
+          book.assets[resource] = book.data(resource);
+          blocks.add(BookBlock(alt, image: resource));
+        }
       } else {
-        book.blocks.add(BookBlock('[$alt：图片缺失]'));
+        blocks.add(BookBlock('[$alt：图片缺失]'));
       }
     } else {
-      book.blocks.add(BookBlock('[$alt：暂不支持此图片格式]'));
+      blocks.add(BookBlock('[$alt：暂不支持此图片格式]'));
     }
   }
 
@@ -502,14 +621,14 @@ class _Blocks {
           'http://www.w3.org/1999/xlink',
         )];
     if (image == null || src == null || src.trim().isEmpty) {
-      book.blocks.add(const BookBlock('[图片：暂不支持此 SVG 图形]'));
+      blocks.add(const BookBlock('[图片：暂不支持此 SVG 图形]'));
       return;
     }
     if (image.id.isNotEmpty) {
-      book.targets.putIfAbsent('$path#${image.id}', () => book.blocks.length);
+      addTarget('$path#${image.id}');
       book.anchors.putIfAbsent(
         '$path#${image.id}',
-        () => BookPosition(book.blocks.length),
+        () => position(blocks.length),
       );
     }
     final title = clean(
@@ -571,12 +690,9 @@ class _Blocks {
     if (block) flush();
     final id = node.id;
     if (id.isNotEmpty) {
-      book.targets.putIfAbsent('$path#$id', () => book.blocks.length);
+      addTarget('$path#$id');
       if (tag == 'img' || tag == 'svg' || tag == 'table') {
-        book.anchors.putIfAbsent(
-          '$path#$id',
-          () => BookPosition(book.blocks.length),
-        );
+        book.anchors.putIfAbsent('$path#$id', () => position(blocks.length));
       } else {
         rawAnchors.add((key: '$path#$id', offset: buffer.length));
       }
@@ -604,7 +720,7 @@ class _Blocks {
       addSvgImage(node);
     } else if (tag == 'table') {
       final caption = node.querySelector('caption');
-      if (caption != null) book.blocks.add(BookBlock(clean(caption.text)));
+      if (caption != null) blocks.add(BookBlock(clean(caption.text)));
       final rows = <List<String>>[];
       final complex =
           node
@@ -631,10 +747,10 @@ class _Blocks {
         rows.add(cells.map((e) => clean(e.text)).toList());
       }
       if (complex) {
-        book.blocks.add(const BookBlock('复杂表格（按行显示）'));
-        book.blocks.addAll(rows.map((row) => BookBlock(row.join(' · '))));
+        blocks.add(const BookBlock('复杂表格（按行显示）'));
+        blocks.addAll(rows.map((row) => BookBlock(row.join(' · '))));
       } else if (rows.isNotEmpty) {
-        book.blocks.add(BookBlock('', rows: rows, tableHeader: hasHeader));
+        blocks.add(BookBlock('', rows: rows, tableHeader: hasHeader));
       }
     } else if (tag == 'br') {
       buffer += '\n';

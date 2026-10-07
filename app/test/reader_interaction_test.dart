@@ -47,7 +47,10 @@ void main() {
           ],
           child: MaterialApp(
             theme: const ReadingApp().theme(Brightness.light),
-            home: ReaderPage(book: book, defaultStyle: const ReaderStyle()),
+            home: ReaderPage(
+              book: book,
+              defaultStyle: const ReaderStyle(paged: false),
+            ),
           ),
         ),
       );
@@ -66,6 +69,24 @@ void main() {
       await tester.tapAt(render.localToGlobal(wordBox.center));
       await tester.pumpAndSettle();
       expect(find.text('明天；未来'), findsOneWidget);
+      final anotherBox = render
+          .getBoxesForSelection(
+            const TextSelection(baseOffset: 9, extentOffset: 11),
+          )
+          .first
+          .toRect();
+      final anotherPoint = render.localToGlobal(anotherBox.center);
+      await tester.tapAt(anotherPoint);
+      await tester.pumpAndSettle();
+      expect(find.byType(WordBubble), findsNothing);
+      await tester.tapAt(anotherPoint);
+      await tester.pumpAndSettle();
+      expect(tester.widget<WordBubble>(find.byType(WordBubble)).word, 'is');
+      await tester.tapAt(render.localToGlobal(wordBox.center));
+      await tester.pumpAndSettle();
+      expect(find.byType(WordBubble), findsNothing);
+      await tester.tapAt(render.localToGlobal(wordBox.center));
+      await tester.pumpAndSettle();
       // Native iOS reports unchanged metrics after ordinary taps. These must
       // not dismiss the bubble; an actual viewport resize must clear its anchor.
       for (var i = 0; i < 3; i++) {

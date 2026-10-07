@@ -4,6 +4,10 @@ import 'package:flutter/material.dart';
 
 enum GlossTier { minimal, brief, full }
 
+enum GlossLanguage { enZh, enEn }
+
+enum GlossExpansion { current, otherLanguage }
+
 enum ReaderTheme { white, paper, quiet, night }
 
 class ReaderPalette {
@@ -42,9 +46,11 @@ class ReaderStyle {
       paragraphSpacing,
       margin,
       bubbleSize;
-  final bool bold, justify, followSystem;
+  final bool bold, justify, followSystem, paged, landscapePaged;
   final ReaderTheme theme;
   final GlossTier tier;
+  final GlossLanguage glossLanguage;
+  final GlossExpansion glossExpansion;
   final int senses;
   const ReaderStyle({
     this.font = 'platform',
@@ -57,10 +63,19 @@ class ReaderStyle {
     this.bold = false,
     this.justify = true,
     this.followSystem = true,
+    this.paged = true,
+    this.landscapePaged = true,
     this.theme = ReaderTheme.white,
     this.tier = GlossTier.minimal,
+    this.glossLanguage = GlossLanguage.enZh,
+    this.glossExpansion = GlossExpansion.current,
     this.senses = 2,
   });
+  static bool isWideLandscape(Size size) =>
+      size.width >= 900 && size.shortestSide >= 600 && size.width > size.height;
+
+  bool pagedFor(Size size) => isWideLandscape(size) ? landscapePaged : paged;
+
   ReaderPalette palette(Brightness brightness) =>
       ReaderPalette.palettes[followSystem && brightness == Brightness.dark
           ? ReaderTheme.night
@@ -70,6 +85,17 @@ class ReaderStyle {
       : font == 'system'
       ? null
       : font;
+  // Only values that affect measured page geometry belong in a layout key.
+  String get paginationKey => jsonEncode([
+    font,
+    size,
+    lineHeight,
+    letterSpacing,
+    paragraphSpacing,
+    margin,
+    bold,
+    justify,
+  ]);
   Map<String, dynamic> toJson() => {
     'version': 1,
     'font': font,
@@ -82,8 +108,12 @@ class ReaderStyle {
     'bold': bold,
     'justify': justify,
     'followSystem': followSystem,
+    'paged': paged,
+    'landscapePaged': landscapePaged,
     'theme': theme.name,
     'tier': tier.name,
+    'glossLanguage': glossLanguage.name,
+    'glossExpansion': glossExpansion.name,
     'senses': senses,
   };
   String encode() => jsonEncode(toJson());
@@ -109,6 +139,8 @@ class ReaderStyle {
       bold: j['bold'] == true,
       justify: j['justify'] != false,
       followSystem: j['followSystem'] != false,
+      paged: j['paged'] == true,
+      landscapePaged: j['landscapePaged'] != false,
       theme: ReaderTheme.values.firstWhere(
         (x) => x.name == j['theme'],
         orElse: () => ReaderTheme.white,
@@ -116,6 +148,14 @@ class ReaderStyle {
       tier: GlossTier.values.firstWhere(
         (x) => x.name == j['tier'],
         orElse: () => GlossTier.minimal,
+      ),
+      glossLanguage: GlossLanguage.values.firstWhere(
+        (x) => x.name == j['glossLanguage'],
+        orElse: () => GlossLanguage.enZh,
+      ),
+      glossExpansion: GlossExpansion.values.firstWhere(
+        (x) => x.name == j['glossExpansion'],
+        orElse: () => GlossExpansion.current,
       ),
       senses: (j['senses'] is int ? j['senses'] as int : 2).clamp(1, 3),
     );

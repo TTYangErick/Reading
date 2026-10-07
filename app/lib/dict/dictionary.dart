@@ -7,19 +7,40 @@ import 'package:sqlite3/sqlite3.dart';
 
 import '../text/language.dart';
 
+class EnglishSense {
+  const EnglishSense({
+    required this.pos,
+    required this.gloss,
+    this.tags = const [],
+    this.examples = const [],
+  });
+  final String pos, gloss;
+  final List<String> tags, examples;
+}
+
 class DictionaryEntry {
   final String word, phonetic, fullGloss, definition;
   final List<String> meanings;
+  final List<EnglishSense> englishSenses;
+  final String? englishWord, englishNotice;
+  final String englishPhonetic;
+  final bool hasChineseSource;
   const DictionaryEntry({
     required this.word,
     required this.phonetic,
     required this.fullGloss,
     required this.definition,
     required this.meanings,
+    this.englishSenses = const [],
+    this.englishWord,
+    this.englishNotice,
+    this.englishPhonetic = '',
+    this.hasChineseSource = true,
   });
 }
 
 abstract interface class DictionaryProvider {
+  /// Null means a successful lookup with no entry; unavailable queries throw.
   DictionaryEntry? lookup(String word);
   void close();
 }

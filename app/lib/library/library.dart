@@ -4,12 +4,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../backup/backup_page.dart';
 import '../book/book.dart';
 import '../book/epub.dart';
 import '../core/providers.dart';
+import '../dict/management_page.dart';
+import '../history/history_page.dart';
 import '../main.dart';
+import '../onboarding/reading_guide.dart';
 import '../reader/reader.dart';
 import '../reader/settings.dart';
+import '../translate/cache_page.dart';
+import '../vocab/vocabulary_page.dart';
 
 BookContent parseImportedFile((String, Uint8List) input) =>
     ParserRegistry([TxtParser(), EpubParser()]).parse(input.$1, input.$2);
@@ -176,6 +182,7 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
       );
       if (confirmed == true) {
         await ref.read(databaseProvider).deleteBook(book.id);
+        ref.read(paginationCacheProvider).removeBook(book.id);
         ref.invalidate(booksProvider);
       }
     } else {
@@ -236,7 +243,6 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
 
   @override
   Widget build(BuildContext context) {
-    ref.watch(dictionaryProvider);
     final books = ref.watch(booksProvider);
     return Scaffold(
       appBar: AppBar(
@@ -257,8 +263,62 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
           PopupMenuButton<String>(
             tooltip: '更多',
             icon: const Icon(Icons.more_horiz),
-            onSelected: (_) => showAcknowledgments(context),
+            onSelected: (value) {
+              if (value == 'reading-guide') {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(
+                    builder: (_) => const ReadingGuidePage(),
+                  ),
+                );
+              } else if (value == 'history') {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(builder: (_) => const HistoryPage()),
+                );
+              } else if (value == 'backup') {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(builder: (_) => const BackupPage()),
+                );
+              } else if (value == 'vocabulary') {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(
+                    builder: (_) => const VocabularyPage(),
+                  ),
+                );
+              } else if (value == 'dictionaries') {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(
+                    builder: (_) => const DictionaryManagementPage(),
+                  ),
+                );
+              } else if (value == 'translation-cache') {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(
+                    builder: (_) => const TranslationCachePage(),
+                  ),
+                );
+              } else {
+                showAcknowledgments(context);
+              }
+            },
             itemBuilder: (_) => [
+              const PopupMenuItem(
+                value: 'reading-guide',
+                child: Text('阅读与离线准备'),
+              ),
+              const PopupMenuItem(value: 'backup', child: Text('备份与恢复')),
+              const PopupMenuItem(value: 'vocabulary', child: Text('生词本')),
+              const PopupMenuItem(value: 'history', child: Text('查词历史')),
+              const PopupMenuItem(value: 'dictionaries', child: Text('词典管理')),
+              const PopupMenuItem(
+                value: 'translation-cache',
+                child: Text('翻译缓存'),
+              ),
               const PopupMenuItem(value: 'license', child: Text('开源许可与致谢')),
             ],
           ),
@@ -333,6 +393,7 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
                               ),
                             ),
                             const SizedBox(height: 24),
+                            const ReadingGuideCard(),
                             TextField(
                               key: const ValueKey('search-books'),
                               textInputAction: TextInputAction.search,

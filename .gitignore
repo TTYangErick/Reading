@@ -4,6 +4,7 @@ __pycache__/
 .venv/
 dict_builder/data/
 app/assets/dictionaries/*.sqlite*
+app/assets/dictionaries/*.building
 artifacts/
 .env
 .env.*

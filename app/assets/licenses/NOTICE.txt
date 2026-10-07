@@ -4,6 +4,15 @@ Reading 0.2
 https://github.com/skywind3000/ECDICT
 内置词典由固定版本数据生成，保留词典原始释义顺序。
 
+英英词典：English Wiktionary，Wiktionary contributors，CC BY-SA 4.0。
+https://en.wiktionary.org/
+https://creativecommons.org/licenses/by-sa/4.0/
+结构化数据由 Kaikki.org / Wiktextract 提供：
+https://kaikki.org/dictionary/rawdata.html
+Reading 对数据进行英语筛选、SQLite 重排，并保留释义、词性、标签、词形及无第三方引文出处的用法示例；未引入音频、图片或引文。
+派生英英数据库同样按 CC BY-SA 4.0 提供；它与 ECDICT 和应用代码分别存储及授权。
+各词条的来源 URL 在完整释义的“词条来源与许可”中提供；页面历史列出贡献者。
+
 内置字体：Literata、Source Serif 4、EB Garamond、Atkinson Hyperlegible，SIL Open Font License。
 https://github.com/google/fonts
 苹果系统字体仅在 iOS 使用，不随应用分发。

@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "id": "wiktionary-en-en",
+  "name": "Wiktionary 英英词典",
+  "language": "en",
+  "targetLanguage": "en",
+  "file": "wiktionary.sqlite",
+  "source": {
+    "url": "https://kaikki.org/dictionary/raw-wiktextract-data.jsonl.gz",
+    "file": "wiktionary-20261003.jsonl.gz",
+    "edition": "enwiktionary",
+    "language": "en",
+    "dumpDate": "2026-09-02",
+    "extractedDate": "2026-10-03",
+    "retrievedDate": "2026-10-05",
+    "extractorRevision": "1a05e46f9efbccda6a2b2f8e21b30a9c0c46513a",
+    "etag": "\"6ac0bbc6-b1af574d\"",
+    "bytes": 2981058381,
+    "sha256": "3dac8a09e57827bef493e2e6b552fe917bf3b1fc55dee05c4e4a3702aff5dbdb",
+    "license": "CC-BY-SA-4.0",
+    "copyright": "Wiktionary contributors",
+    "sourcePage": "https://kaikki.org/dictionary/rawdata.html",
+    "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/"
+  },
+  "counts": {
+    "entries": 1491593,
+    "senses": 1785991,
+    "forms": 920682,
+    "words": 1389727
+  },
+  "bytes": 320331776,
+  "sha256": "d6d770011724e356804bf1af45542c16c8c6b9927e8edb9061d69ce61df7620e",
+  "compressedFile": "wiktionary.sqlite.gz",
+  "compressedBytes": 118980347,
+  "compressedSha256": "f4125079df2541fa0567d51537b8971922c69936f8cd1144da2dd233bedc2d76"
+}

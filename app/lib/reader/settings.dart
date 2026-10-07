@@ -59,6 +59,7 @@ class _ReaderSettingsState extends State<ReaderSettings> {
   @override
   Widget build(BuildContext context) {
     final isIOS = Theme.of(context).platform == TargetPlatform.iOS;
+    final wide = ReaderStyle.isWideLandscape(MediaQuery.sizeOf(context));
     final fonts = <String, String>{
       'platform': isIOS ? 'Iowan Old Style · 默认' : 'Literata · 默认',
       if (isIOS) ...{
@@ -109,6 +110,21 @@ class _ReaderSettingsState extends State<ReaderSettings> {
               },
             ),
           const SizedBox(height: 12),
+          if (wide)
+            const Padding(
+              padding: EdgeInsets.only(bottom: 8),
+              child: Text('横屏宽窗口阅读方式（与竖屏分别保存）'),
+            ),
+          SegmentedButton<bool>(
+            segments: [
+              const ButtonSegment(value: false, label: Text('上下滚动')),
+              ButtonSegment(value: true, label: Text(wide ? '双页翻阅' : '左右翻页')),
+            ],
+            selected: {wide ? style.landscapePaged : style.paged},
+            onSelectionChanged: (value) =>
+                update(wide ? 'landscapePaged' : 'paged', value.first),
+          ),
+          const SizedBox(height: 16),
           DropdownButtonFormField<String>(
             isExpanded: true,
             key: ValueKey('font-${style.font}'),
@@ -220,6 +236,46 @@ class _ReaderSettingsState extends State<ReaderSettings> {
             selected: {style.tier},
             onSelectionChanged: (v) => update('tier', v.first.name),
           ),
+          const SizedBox(height: 18),
+          const Text('主释义'),
+          const SizedBox(height: 8),
+          SegmentedButton<GlossLanguage>(
+            key: const ValueKey('gloss-language-setting'),
+            segments: const [
+              ButtonSegment(value: GlossLanguage.enZh, label: Text('英汉')),
+              ButtonSegment(value: GlossLanguage.enEn, label: Text('英英')),
+            ],
+            selected: {style.glossLanguage},
+            onSelectionChanged: (v) => update('glossLanguage', v.first.name),
+          ),
+          const SizedBox(height: 18),
+          const Text('点击气泡展开'),
+          RadioGroup<GlossExpansion>(
+            groupValue: style.glossExpansion,
+            onChanged: (v) {
+              if (v != null) update('glossExpansion', v.name);
+            },
+            child: Column(
+              children: [
+                for (final option in GlossExpansion.values)
+                  RadioListTile<GlossExpansion>(
+                    key: ValueKey('gloss-expansion-${option.name}'),
+                    contentPadding: EdgeInsets.zero,
+                    dense: true,
+                    enabled: style.tier != GlossTier.full,
+                    value: option,
+                    title: Text(
+                      option == GlossExpansion.current ? '保持当前方式' : '查看另一种语言',
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          if (style.tier == GlossTier.full)
+            const Text(
+              '完整档直接显示主释义；切回极简或简洁后恢复展开设置。',
+              style: TextStyle(fontSize: 12, color: Color(0xFF888888)),
+            ),
           const SizedBox(height: 18),
           Row(
             children: [

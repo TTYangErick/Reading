@@ -15,7 +15,7 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
+        // Keep this ID stable so local updates preserve the existing installation.
         applicationId = "dev.reading.reading_app"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
@@ -31,8 +31,8 @@ android {
 
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
+            // Local optimized testing only; this is NOT a store distribution signature.
+            // Configure an owner-managed upload key before any public distribution.
             signingConfig = signingConfigs.getByName("debug")
         }
     }
@@ -46,4 +46,8 @@ kotlin {
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    implementation("com.google.mlkit:translate:17.0.3")
 }

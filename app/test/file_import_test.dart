@@ -100,6 +100,15 @@ Future<void> _chooseFile(WidgetTester tester) async {
   await tester.pump();
 }
 
+Future<void> _tapReaderControl(WidgetTester tester, Finder target) async {
+  for (var i = 0; i < 2 && target.evaluate().isEmpty; i++) {
+    await tester.tap(find.byKey(const ValueKey('page-label')));
+    await tester.pumpAndSettle();
+  }
+  await tester.tap(target);
+  await tester.pumpAndSettle();
+}
+
 void main() {
   late ReadingDatabase database;
   late ProviderContainer container;
@@ -179,12 +188,14 @@ void main() {
         await _until(tester, () => find.byType(Image).evaluate().isNotEmpty);
         expect(find.text('图片无法显示'), findsNothing);
         expect(tester.takeException(), isNull);
-        await tester.tap(find.byTooltip('目录'));
+        await _tapReaderControl(tester, find.byTooltip('目录'));
         await tester.pumpAndSettle();
         await tester.tap(find.text('Word table'));
         await tester.pumpAndSettle();
         final rich = find.descendant(
-          of: find.byKey(const ValueKey('cell-6-1-0')),
+          of: find.byWidgetPredicate(
+            (w) => w is ReaderParagraph && w.text == 'Tomorrow',
+          ),
           matching: find.byType(RichText),
         );
         final render = tester.renderObject<RenderParagraph>(rich);
@@ -200,12 +211,15 @@ void main() {
         expect(find.text('明天；未来'), findsOneWidget);
         await tester.pump(const Duration(seconds: 3));
         expect(find.byType(WordBubble), findsOneWidget);
-        await tester.tap(find.byTooltip('目录'));
+        await _tapReaderControl(tester, find.byTooltip('目录'));
         await tester.pumpAndSettle();
         await tester.tap(find.text('Second lesson'));
         await tester.pumpAndSettle();
         expect(find.text('Chapter Two', findRichText: true), findsOneWidget);
-        await tester.tap(find.byKey(const ValueKey('back-library')));
+        await _tapReaderControl(
+          tester,
+          find.byKey(const ValueKey('back-library')),
+        );
         await _until(tester, () => find.byType(ReaderPage).evaluate().isEmpty);
         final book = await tester.runAsync(
           () => database.book(saved.single.id),
@@ -246,10 +260,23 @@ void main() {
         '中文与 English。',
       ]);
       expect(book.content.blocks.where((block) => block.heading).length, 2);
+      await tester.pumpAndSettle();
+      expect(
+        find.byWidgetPredicate(
+          (w) => w is ReaderParagraph && w.text == 'Chapter 1',
+        ),
+        findsOneWidget,
+      );
+      // The next chapter no longer shares the first page's remaining space.
+      await tester.drag(find.byType(PageView), const Offset(-650, 0));
+      await tester.pumpAndSettle();
       expect(find.text('中文与 English。', findRichText: true), findsOneWidget);
       expect(picked.read, isTrue);
       if (encoding == 'GBK') expect(picked.path, isNull);
-      await tester.tap(find.byKey(const ValueKey('back-library')));
+      await _tapReaderControl(
+        tester,
+        find.byKey(const ValueKey('back-library')),
+      );
       await tester.pumpAndSettle();
       expect(find.text('$encoding 教材'), findsWidgets);
       expect(picker.calls, 1);

@@ -6,10 +6,19 @@ import 'package:gbk_codec/gbk_codec.dart';
 /// Offsets use Dart/Flutter UTF-16 code units in the final normalized text.
 class BookPosition {
   final int block, offset;
-  const BookPosition(this.block, {this.offset = 0});
-  Map<String, dynamic> toJson() => {'block': block, 'offset': offset};
-  factory BookPosition.fromJson(Map<String, dynamic> j) =>
-      BookPosition(j['block'] as int, offset: j['offset'] as int? ?? 0);
+  // Null is the continuous body; otherwise a supplementaryDocuments key.
+  final String? document;
+  const BookPosition(this.block, {this.offset = 0, this.document});
+  Map<String, dynamic> toJson() => {
+    'block': block,
+    'offset': offset,
+    if (document != null) 'document': document,
+  };
+  factory BookPosition.fromJson(Map<String, dynamic> j) => BookPosition(
+    j['block'] as int,
+    offset: j['offset'] as int? ?? 0,
+    document: j['document'] as String?,
+  );
 }
 
 enum BookLinkKind { link, noteref, backlink }
@@ -22,10 +31,11 @@ enum BookLinkStatus {
   invalid,
 }
 
-/// A text-only link range [start, end) in blocks[block].
+/// A text-only link range [start, end) in the source document's blocks[block].
 /// Only resolved links have a target; external links are data, never requests.
 class BookLink {
   final int block, start, end;
+  final String? document;
   final String href;
   final BookLinkKind kind;
   final BookLinkStatus status;
@@ -38,6 +48,7 @@ class BookLink {
     required this.href,
     required this.kind,
     required this.status,
+    this.document,
     this.targetKey,
     this.target,
   });
@@ -48,6 +59,7 @@ class BookLink {
     'href': href,
     'kind': kind.name,
     'status': status.name,
+    if (document != null) 'document': document,
     if (targetKey != null) 'targetKey': targetKey,
     if (target != null) 'target': target!.toJson(),
   };
@@ -58,6 +70,7 @@ class BookLink {
     href: j['href'] as String,
     kind: BookLinkKind.values.byName(j['kind'] as String),
     status: BookLinkStatus.values.byName(j['status'] as String),
+    document: j['document'] as String?,
     targetKey: j['targetKey'] as String?,
     target: j['target'] == null
         ? null
@@ -112,6 +125,8 @@ class BookChapter {
 
 class BookContent {
   final List<BookBlock> blocks;
+  // Canonical package path -> local blocks. Never included in body progress/TOC.
+  final Map<String, List<BookBlock>> supplementaryDocuments;
   final String encoding, format;
   final String? title;
   final List<BookChapter> chapters;
@@ -129,6 +144,7 @@ class BookContent {
     this.chapters = const [],
     this.links = const [],
     this.anchors = const {},
+    this.supplementaryDocuments = const {},
     this.assets = const {},
   });
   List<BookChapter> get contents => chapters.isNotEmpty
@@ -137,6 +153,12 @@ class BookContent {
             .where((b) => b.$2.heading)
             .map((b) => BookChapter(b.$2.text, b.$1))
             .toList();
+  // Derived from the same chapter boundaries the reader exposes in its TOC.
+  // No serialized page numbers or inserted source blocks are needed.
+  Set<int> get chapterStarts => {
+    for (final chapter in contents)
+      if (chapter.block >= 0 && chapter.block < blocks.length) chapter.block,
+  };
   String encode() => jsonEncode({
     'blocks': blocks.map((b) => b.toJson()).toList(),
     'encoding': encoding,
@@ -146,6 +168,10 @@ class BookContent {
     if (links.isNotEmpty) 'links': links.map((l) => l.toJson()).toList(),
     if (anchors.isNotEmpty)
       'anchors': anchors.map((k, v) => MapEntry(k, v.toJson())),
+    if (supplementaryDocuments.isNotEmpty)
+      'supplementaryDocuments': supplementaryDocuments.map(
+        (k, v) => MapEntry(k, v.map((b) => b.toJson()).toList()),
+      ),
   });
   factory BookContent.decode(String text) {
     final j = jsonDecode(text) as Map<String, dynamic>;
@@ -165,6 +191,15 @@ class BookContent {
       anchors: (j['anchors'] as Map<String, dynamic>? ?? {}).map(
         (k, v) => MapEntry(k, BookPosition.fromJson(v as Map<String, dynamic>)),
       ),
+      supplementaryDocuments:
+          (j['supplementaryDocuments'] as Map<String, dynamic>? ?? {}).map(
+            (k, v) => MapEntry(
+              k,
+              (v as List)
+                  .map((b) => BookBlock.fromJson(b as Map<String, dynamic>))
+                  .toList(),
+            ),
+          ),
     );
   }
 }
@@ -240,11 +275,15 @@ class ParserRegistry {
 }
 
 class Book {
+  // Exact persisted source, for session layout reuse; not another DB field.
+  final String? contentSnapshot;
   final String id, title;
   final BookContent content;
   final int position, createdAt, updatedAt, lastReadAt;
   final String? style;
+  final String? location;
   const Book({
+    this.contentSnapshot,
     required this.id,
     required this.title,
     required this.content,
@@ -253,6 +292,7 @@ class Book {
     required this.updatedAt,
     this.lastReadAt = 0,
     this.style,
+    this.location,
   });
   double get progress => content.blocks.length <= 1
       ? (lastReadAt > 0 ? 1 : 0)

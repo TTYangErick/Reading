@@ -72,6 +72,7 @@ Future<void> showAcknowledgments(BuildContext context) async {
             const SizedBox(height: 24),
             for (final name in [
               'ECDICT',
+              'Wiktionary',
               'Literata',
               'SourceSerif4',
               'EBGaramond',
