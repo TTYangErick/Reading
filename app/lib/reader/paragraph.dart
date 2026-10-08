@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/scheduler.dart';
 
 import '../book/book.dart';
 import '../text/language.dart';
+import 'selection.dart';
 
 class ReaderParagraph extends StatefulWidget {
   final String text;
@@ -16,6 +18,7 @@ class ReaderParagraph extends StatefulWidget {
   final VoidCallback? onSelectionStart;
   final int visibleStart;
   final int? visibleEnd;
+  final int? sourceBlock;
   final VoidCallback onBlank;
   final List<BookLink> links;
   final ValueChanged<BookLink>? onLink;
@@ -33,6 +36,7 @@ class ReaderParagraph extends StatefulWidget {
     this.onSelectionStart,
     this.visibleStart = 0,
     this.visibleEnd,
+    this.sourceBlock,
     required this.onBlank,
     this.links = const [],
     this.onLink,
@@ -42,7 +46,8 @@ class ReaderParagraph extends StatefulWidget {
   State<ReaderParagraph> createState() => _ReaderParagraphState();
 }
 
-class _ReaderParagraphState extends State<ReaderParagraph> {
+class _ReaderParagraphState extends State<ReaderParagraph>
+    implements ReadingSelectionRegion {
   final textKey = GlobalKey();
   int? sentenceOffset;
   Offset? pressOrigin;
@@ -51,10 +56,45 @@ class _ReaderParagraphState extends State<ReaderParagraph> {
   bool dragged = false;
   Size? viewSize;
   TextScaler? scaler;
+  ReadingSelection? selectionGroup;
+  bool disposed = false;
+
+  @override
+  int get selectionBlock => widget.sourceBlock!;
+  @override
+  int get selectionStart => widget.visibleStart;
+  @override
+  int get selectionEnd => visibleEnd;
+  @override
+  RenderParagraph get selectionRender => paragraph;
+  @override
+  void selectionChanged() {
+    if (disposed || !mounted) return;
+    if (SchedulerBinding.instance.schedulerPhase ==
+        SchedulerPhase.persistentCallbacks) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && !disposed) setState(() {});
+      });
+    } else {
+      setState(() {});
+    }
+  }
+
+  @override
+  void selectionCancelled() {
+    clearLocalPress();
+    selectionChanged();
+  }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    final group = ReadingSelectionScope.maybeOf(context);
+    if (group != selectionGroup) {
+      if (widget.sourceBlock != null) selectionGroup?.unregister(this);
+      selectionGroup = group;
+      if (widget.sourceBlock != null) selectionGroup?.register(this);
+    }
     final size = MediaQuery.sizeOf(context),
         scale = MediaQuery.textScalerOf(context);
     if (viewSize != size || scaler != scale) clearPress();
@@ -65,6 +105,11 @@ class _ReaderParagraphState extends State<ReaderParagraph> {
   int get visibleEnd => widget.visibleEnd ?? widget.text.length;
 
   void clearPress() {
+    if (selectionGroup?.owns(this) == true) selectionGroup!.cancel();
+    clearLocalPress();
+  }
+
+  void clearLocalPress() {
     sentenceOffset = null;
     pressOrigin = null;
     pressWord = null;
@@ -75,6 +120,10 @@ class _ReaderParagraphState extends State<ReaderParagraph> {
   @override
   void didUpdateWidget(covariant ReaderParagraph oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.sourceBlock != widget.sourceBlock) {
+      if (oldWidget.sourceBlock != null) selectionGroup?.unregister(this);
+      if (widget.sourceBlock != null) selectionGroup?.register(this);
+    }
     if (oldWidget.text != widget.text ||
         oldWidget.style != widget.style ||
         oldWidget.visibleStart != widget.visibleStart ||
@@ -91,6 +140,7 @@ class _ReaderParagraphState extends State<ReaderParagraph> {
     if (offset < widget.visibleStart || offset >= visibleEnd) return;
     final word = render.getWordBoundary(TextPosition(offset: offset));
     if (!word.isValid || word.isCollapsed) return;
+    selectionGroup?.cancel();
     setState(() {
       sentenceOffset = offset;
       pressOrigin = global;
@@ -98,10 +148,15 @@ class _ReaderParagraphState extends State<ReaderParagraph> {
       pressRange = widget.language.sentenceAt(widget.text, offset);
       dragged = false;
     });
+    if (widget.sourceBlock != null) selectionGroup?.begin(this, global, word);
     widget.onSelectionStart?.call();
   }
 
   void movePress(Offset global) {
+    if (selectionGroup?.owns(this) == true) {
+      selectionGroup!.move(global, View.of(context).viewId);
+      return;
+    }
     if (pressOrigin == null ||
         pressWord == null ||
         widget.onSelection == null ||
@@ -136,7 +191,13 @@ class _ReaderParagraphState extends State<ReaderParagraph> {
 
   void endPress() {
     final offset = sentenceOffset, range = pressRange, adjusted = dragged;
+    final group = selectionGroup;
+    final text = group?.finish(this);
     setState(clearPress);
+    if (text != null && text.trim().isNotEmpty) {
+      group!.onSelected(text);
+      return;
+    }
     if (offset == null) return;
     if (adjusted && range != null && range.text.trim().isNotEmpty) {
       widget.onSelection?.call(range);
@@ -188,7 +249,12 @@ class _ReaderParagraphState extends State<ReaderParagraph> {
 
   @override
   Widget build(BuildContext context) {
-    final range = pressRange ?? widget.selection;
+    final shared = widget.sourceBlock == null
+        ? null
+        : selectionGroup?.rangeFor(this);
+    final range = shared == null
+        ? pressRange ?? widget.selection
+        : WordRange(shared.start, shared.end, '');
     final textLinks = links.toList();
     final boundaries = <int>{
       0,
@@ -237,5 +303,12 @@ class _ReaderParagraphState extends State<ReaderParagraph> {
         textScaler: MediaQuery.textScalerOf(context),
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    disposed = true;
+    if (widget.sourceBlock != null) selectionGroup?.unregister(this);
+    super.dispose();
   }
 }

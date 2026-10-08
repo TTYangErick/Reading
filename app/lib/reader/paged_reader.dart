@@ -361,6 +361,7 @@ class PagedReaderState extends State<PagedReader> {
     Key? key,
   }) => ReaderParagraph(
     key: key,
+    sourceBlock: cell == null && links ? index : null,
     anchorKey:
         cell != null &&
             cell.contains('-') &&

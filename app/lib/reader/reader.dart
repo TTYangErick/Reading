@@ -23,6 +23,7 @@ import '../translate/sentence_sheet.dart';
 import 'bubble.dart';
 import 'image_viewer.dart';
 import 'settings.dart';
+import 'selection.dart';
 import '../vocab/vocabulary.dart';
 import '../vocab/save_button.dart';
 import 'style.dart';
@@ -1051,6 +1052,7 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
     String? cell,
     bool heading = false,
   }) => ReaderParagraph(
+    sourceBlock: cell == null && blocks[index].image == null ? index : null,
     key: ValueKey(cell == null ? 'paragraph-$index' : 'cell-$index-$cell'),
     anchorKey:
         isLinkView &&
@@ -1221,8 +1223,13 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
   }
 
   @override
-  Widget build(BuildContext context) =>
-      ReadingOrientationScope(child: buildReader(context));
+  Widget build(BuildContext context) => ReadingOrientationScope(
+    child: ReadingSelectionScope(
+      blocks: blocks,
+      onSelected: (text) => showSelectedText(text, adjusted: true),
+      child: buildReader(context),
+    ),
+  );
 
   Widget buildReader(BuildContext context) {
     syncMode(MediaQuery.sizeOf(context));
