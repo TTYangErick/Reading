@@ -80,3 +80,28 @@ Android本地优化测试包（在app目录）：
 ```
 
 产物为 `build/app/outputs/flutter-apk/app-arm64-v8a-release.apk`，只支持ARM64。当前Release沿用debug签名，iOS沿用开发签名；这些是本地测试配置，不是正式商店分发配置。发布前需要所有者管理的签名与渠道配置，并完成隐私申报及设备验收；具体状态只记录于上层PLAN.md。不要为替换图标修改现有应用标识或卸载用户数据。
+
+## 集中交付与真机性能记录
+
+此处是操作入口；待验项目和结论只维护在PLAN。构建/准备样本不会安装应用：
+
+```sh
+# 仓库根目录：重建三份小型封面/作者功能样本
+python3 scripts/make_shelf_fixture.py
+# app目录：准备Android ARM64性能测量包
+../scripts/flutterw build apk --profile --target-platform android-arm64 --split-per-abi -P force-version-code-ignoring-abi=true
+```
+
+Profile产物为 `build/app/outputs/flutter-apk/app-arm64-v8a-profile.apk`。Release用于通常的体验检查；Profile用于连接DevTools采集UI/Raster帧耗时、CPU及内存，不以Debug包或宿主基准判定真机流畅度。依据和工具入口见 [Flutter性能测量](https://docs.flutter.dev/perf/ui-performance)、[DevTools Performance](https://docs.flutter.dev/tools/devtools/performance)。
+
+用户安排安装后，先读取新的设备/当前包版本与签名、书库/位置/设置基线；同应用标识、同签名且不降级才正常覆盖更新。不卸载、不清库、不在用户设备运行flutter test -d；无法读取一致基线时先解决基线，不用旧快照替代。需完整业务快照时先通过应用导出备份；原始SQLite复制必须包含当次WAL并保证一致性。备份替换验收用专用环境。
+
+已正常更新并手动打开Profile应用后，在app目录连接（此命令本身不安装）：
+
+```sh
+READING_PROXY_URL='' ../scripts/flutterw attach --profile -d <设备ID>
+```
+
+按工具给出的DevTools入口录制/导出性能快照。记录设备/系统、刷新率、包版本/校验值、书籍稳定标识与大小、布局/字体、测量场景；不将原文或私人书库放进Git。分别测新进程首次开书、同会话重开、翻页/点词面板、书架滚动，先记录默认追踪，再为定位慢帧单独开启详细追踪。每场景重复三次，保留全部结果及首次/重开区别，不只挑最好的一次；结合屏幕刷新率看UI/Raster耗时与慢帧比例，记录峰值RSS和GC，不把Dart堆大小等同进程总内存。仍显示重新分页时核对缓存是否被预算拒绝，不先提高资源上限。
+
+小样本只用于功能检查：封面/作者三份样本的预期见 [样本说明](test/fixtures/epub/README.md)；脚注继续复用footnotes-epub2/3。真实性能用原先出现卡顿的同一本书和同一设备。Trace、截图、设备快照、安装包放忽略的 `../artifacts/`，当前结论回写PLAN，不另建验收计划。

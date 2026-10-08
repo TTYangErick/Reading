@@ -39,15 +39,45 @@ final coverBytes = ZipDecoder()
     .find('OPS/images/lesson image.png')!
     .content;
 
-void expectSameReadingContent(BookContent actual, BookContent original) {
+void expectSameReadingContent(
+  BookContent actual,
+  BookContent original, {
+  bool ignoreTitle = false,
+}) {
   final a = jsonDecode(actual.encode()) as Map<String, dynamic>;
   final b = jsonDecode(original.encode()) as Map<String, dynamic>;
   a.remove('authors');
   a.remove('cover');
+  if (ignoreTitle) {
+    a.remove('title');
+    b.remove('title');
+  }
   expect(a, b); // Includes blocks, TOC, source offsets, links and anchors.
 }
 
 void main() {
+  for (final kind in ['cover', 'missing', 'broken']) {
+    test('delivery shelf-$kind fixture preserves lesson body and targets', () {
+      final parsed = EpubParser().parse(
+        File('test/fixtures/epub/shelf-$kind.epub').readAsBytesSync(),
+      );
+      final original = EpubParser().parse(metadataFixture());
+      expect(parsed.title, 'Reading shelf — $kind');
+      expect(parsed.authors, ['Reading Sample Author']);
+      expect(
+        parsed.cover,
+        kind == 'missing' ? null : 'OPS/images/shelf cover.png',
+      );
+      expectSameReadingContent(parsed, original, ignoreTitle: true);
+      if (kind == 'broken') {
+        expect(
+          utf8.decode(parsed.assets[parsed.cover]!),
+          'not a decodable image',
+        );
+      }
+    });
+  }
+
   test(
     'EPUB3 cover-only image and creator roles preserve all reading content',
     () {
