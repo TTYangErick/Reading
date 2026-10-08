@@ -1,7 +1,11 @@
 # Reading Flutter App
 
-支持 EPUB 2/3、TXT／粘贴导入、书架、英汉/英英离线查词、单页/双页和滚动阅读、脚注、目录、图片、简单表格、样式与精确位置保存，以及原生句子翻译和译文缓存管理。
+支持 EPUB 2/3、TXT／粘贴及外部文件导入、书架、英汉/英英离线查词、单页/双页和滚动阅读、脚注、目录、图片、简单表格、样式与精确位置保存，以及原生句子翻译和译文缓存管理。
 完整执行状态和验收结果只见上层 `PLAN.md`；原计划见 `../docs/original-plan.md`。
+
+## 从其他 App 导入
+
+在 iPhone/iPad 的文件 App 选择 EPUB/TXT，使用“用 Reading 打开”；Android 可从文件管理器打开或分享单个 EPUB/TXT 给 Reading。回到书架，确认待导入卡片即可添加；也可忽略。正在读书时只接收，不会跳走。待处理文件不跨应用进程保存，必要时重新分享；V1不接收批量文件或网页链接。完整入口、限制和兼容规则见 [导入契约](../docs/import.md)，真实系统投递验收状态见PLAN。
 
 ## 重建与运行
 
@@ -41,9 +45,12 @@ READING_PROXY_URL='' ../scripts/flutterw test integration_test/reading_flow_test
 
 首次分页性能诊断单独按需运行，样本、命令和测量边界见 [benchmark/README.md](benchmark/README.md)；不包含在常规全量测试，也不代替真机Profile。
 
+原生构建按上述入口刷新插件配置；不要与会重新生成插件注册文件的其他Flutter任务并发。若Android Release报告 integration_test 插件缺失，先按正常入口构建（不要跳过pub刷新），不手改生成文件或把测试插件加入生产依赖。
+
 ## 代码与数据
 
 - `lib/book`：可替换 BookParser，UTF-8/GBK TXT 和可重排 EPUB 2/3 解析、目录、作者与本地封面/图片资源。
+- `lib/imports`：有界外部文件收件箱、确认卡片与读取；原生文件入口分别在Android ReadingImports和iOS ReadingImports/SceneDelegate。
 - `lib/library`：书架、导入与管理，EPUB作者/封面展示；旧书或缺图沿用文字封面，识别与资源边界见 [阅读契约](../docs/epub-links.md#书架作者与封面)。
 - `lib/text`：LanguageSupport，英文点词范围、句子范围及候选词。
 - `lib/dict`：DictionaryProvider，组合只读 ECDICT 英汉与 Wiktionary 英英；词形、来源和释义顺序查询。

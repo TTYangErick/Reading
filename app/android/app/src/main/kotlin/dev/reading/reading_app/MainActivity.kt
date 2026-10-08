@@ -1,5 +1,7 @@
 package dev.reading.reading_app
 
+import android.content.Intent
+import android.os.Bundle
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -8,11 +10,15 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 
 class MainActivity : FlutterActivity() {
+    private var imports: ReadingImports? = null
     private var immersive = false
     private val translation = ReadingTranslation()
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        imports = ReadingImports.get(applicationContext).also {
+            it.attach(MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "dev.reading/imports"))
+        }
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "dev.reading/translation")
             .setMethodCallHandler(translation)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "dev.reading/system_ui")
@@ -27,6 +33,17 @@ class MainActivity : FlutterActivity() {
             }
     }
 
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        if (savedInstanceState == null) imports?.accept(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        imports?.accept(intent)
+    }
+
     private fun applySystemBars() {
         val controller = WindowCompat.getInsetsController(window, window.decorView)
         controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
@@ -38,6 +55,7 @@ class MainActivity : FlutterActivity() {
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "dev.reading/translation")
             .setMethodCallHandler(null)
         translation.close()
+        imports?.detach()
         super.cleanUpFlutterEngine(flutterEngine)
     }
 

@@ -10,6 +10,7 @@ import '../book/epub.dart';
 import '../core/providers.dart';
 import '../dict/management_page.dart';
 import '../history/history_page.dart';
+import '../imports/inbox.dart';
 import '../main.dart';
 import '../onboarding/reading_guide.dart';
 import '../reader/reader.dart';
@@ -48,18 +49,49 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
     ref.invalidate(booksProvider);
   }
 
-  Future<void> add(String title, BookContent content) async {
+  Future<void> add(
+    String title,
+    BookContent content, {
+    Future<void> Function()? onSaved,
+  }) async {
     final database = ref.read(databaseProvider);
     final id = await database.addBook(
       title.trim().isEmpty ? '未命名文本' : title.trim(),
       content,
     );
+    await onSaved?.call();
     final book = await database.book(id);
     ref.invalidate(booksProvider);
     if (mounted && book != null) await openBook(book);
   }
 
+  Future<void> importReceived(IncomingBook item) async {
+    if (importing || !item.ready || item.path == null) return;
+    setState(() => importing = true);
+    try {
+      final content = await compute(parseReceivedFile, (item.name, item.path!));
+      if (!mounted) return;
+      await add(
+        content.title?.isNotEmpty == true
+            ? content.title!
+            : item.name.replaceFirst(
+                RegExp(r'\.(txt|epub)$', caseSensitive: false),
+                '',
+              ),
+        content,
+        onSaved: () => ref.read(importInboxProvider.notifier).release(item.id),
+      );
+    } catch (error) {
+      // Keep failed input available for explicit dismissal/retry. No partial
+      // book is inserted: parsing completes before the database transaction.
+      message(error is FormatException ? error.message : '导入失败，请重新分享文件后重试。');
+    } finally {
+      if (mounted) setState(() => importing = false);
+    }
+  }
+
   Future<void> importFile() async {
+    if (importing) return;
     try {
       final file = await FilePicker.pickFile(
         type: FileType.custom,
@@ -80,7 +112,6 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
         await file.readAsBytes(),
       ));
       if (!mounted) return;
-      setState(() => importing = false);
       await add(
         content.title?.isNotEmpty == true
             ? content.title!
@@ -244,8 +275,9 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
 
   @override
   Widget build(BuildContext context) {
+    final incoming = ref.watch(importInboxProvider);
     final books = ref.watch(booksProvider);
-    return Scaffold(
+    final page = Scaffold(
       appBar: AppBar(
         title: const Text(
           'READING',
@@ -258,10 +290,11 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
         actions: [
           IconButton(
             tooltip: '默认阅读设置',
-            onPressed: preferences,
+            onPressed: importing ? null : preferences,
             icon: const Icon(Icons.tune, size: 21),
           ),
           PopupMenuButton<String>(
+            enabled: !importing,
             tooltip: '更多',
             icon: const Icon(Icons.more_horiz),
             onSelected: (value) {
@@ -394,6 +427,14 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
                               ),
                             ),
                             const SizedBox(height: 24),
+                            ImportInboxCards(
+                              items: incoming,
+                              busy: importing,
+                              onImport: importReceived,
+                              onIgnore: (id) => ref
+                                  .read(importInboxProvider.notifier)
+                                  .release(id),
+                            ),
                             const ReadingGuideCard(),
                             TextField(
                               key: const ValueKey('search-books'),
@@ -650,6 +691,11 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
           ),
         ),
       ),
+    );
+    return AbsorbPointer(
+      key: const ValueKey('library-import-lock'),
+      absorbing: importing,
+      child: page,
     );
   }
 }
