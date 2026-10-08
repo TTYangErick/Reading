@@ -75,8 +75,9 @@
 - `pageForPosition` 按文档/块/UTF-16 偏移查页；页面起点由 `pages[index].start` 取得。页边界归后页，块末尾 caret 归该块末页；外部文档、未知块、负值或超长偏移返回 null。页码仅为当前布局结果，重排后用同一 `BookPosition` 再查页。
 - `BookPosition(book.position)` 可将旧整数正文进度解释为原块开头；纯布局层不负责持久化；分页 UI 通过下述源位置契约保存段内位置，旧整数块号仍保留。
 - 页首不保留段间/标题上方空隙，避免空白页；空文档返回空页列表。不可拆分带高于视口、或字形宽于可用宽度时仍输出并标记 `overflows`，UI 需处理该状态，不能静默裁掉文字。非法视口/样式、未知文档直接报参数错误；图片/表格显式抛 `UnsupportedError`，不静默遗漏。
+- 长段（至少64物理行）的非空行通过 [Paragraph.getLineNumberAt](https://api.flutter.dev/flutter/dart-ui/Paragraph/getLineNumberAt.html) 在逻辑UTF-16位置上二分定位起点，再对齐字素簇；不依赖英语或视觉左右顺序。短段、空行及相邻行、引擎返回不明确位置时保留旧getPositionForOffset/getLineBoundary查询，保持控制字符/空行的原有合并语义。源段落和PageAnchor格式不变，不截断原文、不提高单段或缓存限额。回归对照见 `line_boundaries_test.dart`，基准命令见 [诊断说明](../app/benchmark/README.md)。
 - 正文章节在下一物理页开始：`BookContent.chapterStarts` 从现有 `contents` 派生（显式目录含子级条目优先；无目录沿用 heading），过滤越界并按块去重。`TextPaginator` 与 `BookPaginator` 在章节块前结束非空页，首章/重复条目不产生额外空页，图片/表格起章同样生效。iPhone/iPad/Android 共用；双页可从左页或右页起章，不为对齐左页插空白。补充脚注不套正文边界；滚动模式不加整屏空白。无 JSON/schema 变化，已有书无需重导入，位置仍按源锚点保存；有目录时非目录小标题不强制换页，无目录旧 EPUB 的 heading 无法进一步区分标题级别，沿用其既有目录回退语义。
-- 此文字实现同步布局一个文档、逐段释放 `TextPainter`，未做大书耗时验收、渐进布局或缓存；媒体由下方组合分页器处理。手机分页、持久化与 iPad 双页接入见下文。
+- 文字基础层同步测量，使用与TextPainter相同的ParagraphStyle/TextSpan生成原生Paragraph，逐段释放；不改变完整段落的排版或绘制。媒体与协作让出由下方组合分页器处理；会话缓存和性能验证边界见后文。
 
 回归入口 `pagination_test.dart`：文字守恒、源位置、Unicode/空块、重排、章节边界与极小视口；实际字体布局/选区与绘制交叉检查。
 

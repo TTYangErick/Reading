@@ -244,7 +244,7 @@ Future<Map<String, Object?>> _sample(
   };
 }
 
-// Isolated attribution probe using the same TextPainter calls as TextPaginator.
+// Historical attribution probe using the pre-optimization TextPainter calls.
 // Not a second paginator: the production API above remains the measured pipeline.
 Map<String, Object> _paragraphProbe(String text, _Geometry geometry) {
   final width =

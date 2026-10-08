@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flutter/widgets.dart';
 
@@ -173,28 +174,34 @@ class TextPaginator {
     for (var blockIndex = 0; blockIndex < blocks.length; blockIndex++) {
       if (chapterStarts.contains(blockIndex)) finishPage();
       final block = blocks[blockIndex];
-      final painter = TextPainter(
-        text: TextSpan(
-          // Reserve one blank line without adding a character to source ranges.
-          text: block.text.isEmpty ? '\u200B' : block.text,
-          style: block.heading
-              ? baseStyle.copyWith(
-                  fontSize: style.size * 1.35,
-                  fontWeight: FontWeight.w600,
-                  height: 1.3,
-                )
-              : baseStyle,
-        ),
-        textAlign: style.justify && !block.heading
-            ? TextAlign.justify
-            : TextAlign.start,
-        textDirection: textDirection,
-        textScaler: textScaler,
-        locale: locale,
+      final span = TextSpan(
+        // Reserve one blank line without adding a character to source ranges.
+        text: block.text.isEmpty ? '\u200B' : block.text,
+        style: block.heading
+            ? baseStyle.copyWith(
+                fontSize: style.size * 1.35,
+                fontWeight: FontWeight.w600,
+                height: 1.3,
+              )
+            : baseStyle,
       );
+      // Match TextPainter's public ParagraphStyle/TextSpan construction. Keeping
+      // the paragraph exposes getLineNumberAt without a second shaping pass.
+      final builder = ui.ParagraphBuilder(
+        span.style!.getParagraphStyle(
+          textAlign: style.justify && !block.heading
+              ? TextAlign.justify
+              : TextAlign.start,
+          textDirection: textDirection,
+          textScaler: textScaler,
+          locale: locale,
+        ),
+      );
+      span.build(builder, textScaler: textScaler);
+      final paragraph = builder.build();
       try {
-        painter.layout(minWidth: available.width, maxWidth: available.width);
-        final metrics = painter.computeLineMetrics();
+        paragraph.layout(ui.ParagraphConstraints(width: available.width));
+        final metrics = paragraph.computeLineMetrics();
         final boundaries = [0];
         for (final grapheme in block.text.characters) {
           boundaries.add(boundaries.last + grapheme.length);
@@ -216,17 +223,32 @@ class TextPaginator {
         final bands = <(int, int)>[]; // (first physical line, source start)
         for (var i = 0; i < metrics.length; i++) {
           final metric = metrics[i];
-          final hit = painter.getPositionForOffset(
-            Offset(
-              metric.left + metric.width / 2,
-              metric.baseline - metric.ascent / 2,
-            ),
-          );
-          final range = painter.getLineBoundary(hit);
-          if (!range.isValid || range.start > block.text.length) {
-            throw StateError('Text layout returned an invalid line range.');
+          // Empty lines can share a legacy source band with a neighbor (e.g.
+          // bidi controls before a blank line). Preserve hit/affinity queries
+          // for the empty line and both neighbors, not just the empty line.
+          final clearLine =
+              metric.width > 0 &&
+              (i == 0 || metrics[i - 1].width > 0) &&
+              (i + 1 == metrics.length || metrics[i + 1].width > 0);
+          // Small paragraphs already have cheap range queries. Logical source
+          // line numbers are monotone regardless of the visual bidi order.
+          var sourceStart = metrics.length >= 64 && clearLine
+              ? _lineStart(paragraph, i, block.text.length)
+              : null;
+          if (sourceStart == null) {
+            final hit = paragraph.getPositionForOffset(
+              Offset(
+                metric.left + metric.width / 2,
+                metric.baseline - metric.ascent / 2,
+              ),
+            );
+            final range = paragraph.getLineBoundary(hit);
+            if (!range.isValid || range.start > block.text.length) {
+              throw StateError('Text layout returned an invalid line range.');
+            }
+            sourceStart = range.start;
           }
-          final start = i == 0 ? 0 : clusterStart(range.start);
+          final start = i == 0 ? 0 : clusterStart(sourceStart);
           if (bands.isEmpty || start > bands.last.$2) bands.add((i, start));
         }
         for (var band = 0; band < bands.length; band++) {
@@ -240,7 +262,7 @@ class TextPaginator {
           final metric = metrics[i];
           final sourceTop = i == 0 ? 0.0 : metric.baseline - metric.ascent;
           final sourceBottom = nextLine == metrics.length
-              ? painter.height
+              ? paragraph.height
               : metrics[nextLine].baseline - metrics[nextLine].ascent;
           final height = sourceBottom - sourceTop;
           if (!height.isFinite || height <= 0) {
@@ -284,10 +306,28 @@ class TextPaginator {
           throw StateError('Text layout did not cover the entire block.');
         }
       } finally {
-        painter.dispose();
+        paragraph.dispose();
       }
     }
     finishPage();
     return TextPagination._(document, available, pages, blocks);
   }
+}
+
+// Lower bound over logical UTF-16 offsets, independent of language/direction.
+// Newline code units belong to the preceding line (Paragraph API contract).
+// Null denotes an engine offset that cannot be mapped; retain the old query.
+int? _lineStart(ui.Paragraph paragraph, int line, int length) {
+  var low = 0, high = length;
+  while (low < high) {
+    final middle = (low + high) ~/ 2;
+    final actual = paragraph.getLineNumberAt(middle);
+    if (actual == null) return null;
+    if (actual < line) {
+      low = middle + 1;
+    } else {
+      high = middle;
+    }
+  }
+  return low;
 }
