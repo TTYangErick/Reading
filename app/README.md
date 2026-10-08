@@ -50,11 +50,11 @@ READING_PROXY_URL='' ../scripts/flutterw test integration_test/reading_flow_test
 - `lib/core`：Riverpod 依赖、平台沉浸模式。
 - `lib/translate`：Apple Translation / Android ML Kit 原生接口、句子面板和缓存管理；模型需先下载，Apple 翻译需 iOS/iPadOS 18+ 真机。
 
-数据仅保存在 App 的 Application Support 目录。卸载 App 会清除本地书架；书架“更多 → 备份与恢复”可保存和导入 `.readingbackup` 文件；预检与确认后整库替换，不合并。备份包含六张业务表与图片，不含词典/系统模型；限额与文件契约见 [备份与恢复](../docs/backup.md)。
+数据仅保存在 App 的 Application Support 目录。卸载 App 会清除本地书架；书架“更多 → 备份与恢复”可保存和导入 `.readingbackup` 文件；预检与确认后整库替换，不合并。备份业务数据与图片的具体范围、兼容规则和限额见 [备份与恢复](../docs/backup.md)。
 
 当前 TXT 上限 20 MB，EPUB 上限 50 MB；分页位置保存原文块内偏移或媒体/表格行，不保存易变页码。EPUB 基础功能范围和限制见 [EPUB 验收记录](../docs/epub-acceptance.md)，链接与补充脚注见 [链接契约](../docs/epub-links.md)。词汇本、备份和剩余设备验收见 `../PLAN.md`。
 
-TXT 真实文件与错误重试回归：`test/file_import_test.dart`（替代原生选择对话框）；样本在 `test/fixtures/txt/`。原生操作验收与未关闭项见 [阶段 2 验收表](../docs/phase-2-acceptance.md)。
+TXT 真实文件与错误重试回归：`test/file_import_test.dart`（替代原生选择对话框）；样本在 `test/fixtures/txt/`。原生操作的当前未关闭项见 [PLAN.md](../PLAN.md)；[阶段 2 验收表](../docs/phase-2-acceptance.md)仅保留历史观察。
 
 两份词典均未收录的词会在原气泡尝试英译中机器翻译，并明确标注；首次模型下载需点击确认。词库出错或只有所选释义语言缺失时不会用机器译文替换词条。点气泡外仍只关闭当前释义。
 
