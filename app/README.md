@@ -39,6 +39,8 @@ READING_PROXY_URL='' ../scripts/flutterw test integration_test/reading_flow_test
 
 集成测试的业务数据使用临时数据库，但 `flutter test -d` 工具会重装/卸载测试应用：仅在专用模拟器运行，勿在已有真实书架的设备运行。测试覆盖真实词典、粘贴导入、气泡与复制、即时设置、跳转、销毁并重建 App/数据库后的位置恢复、书名搜索/修改/删除。
 
+首次分页性能诊断单独按需运行，样本、命令和测量边界见 [benchmark/README.md](benchmark/README.md)；不包含在常规全量测试，也不代替真机Profile。
+
 ## 代码与数据
 
 - `lib/book`：可替换 BookParser，UTF-8/GBK TXT 和可重排 EPUB 2/3 解析、目录及图片资源。
