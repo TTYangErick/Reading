@@ -120,11 +120,16 @@ python3 scripts/prepare_delivery.py --verify 'artifacts/delivery/reading-版本-
 
 用户安排安装后，先读取新的设备/当前包版本与签名、书库/位置/设置基线；同应用标识、同签名且不降级才正常覆盖更新。不卸载、不清库、不在用户设备运行flutter test -d；无法读取一致基线时先解决基线，不用旧快照替代。需完整业务快照时先通过应用导出备份；原始SQLite复制必须包含当次WAL并保证一致性。备份替换验收用专用环境。
 
-已正常更新并手动打开Profile应用后，在app目录连接（此命令本身不安装）：
+已正常更新Profile应用后，先回书架等待业务写入完成，再显式启用Dart profiling启动并连接。冷启动只点桌面图标不保证测量服务启动；下面的参数沿用Flutter工具的Profile启动方式。命令仅重启/打开已安装应用，不安装、卸载或清库；`adb`使用Android SDK的platform-tools版本：
 
 ```sh
+adb -s <设备ID> shell am force-stop dev.reading.reading_app
+adb -s <设备ID> shell am start -W -n dev.reading.reading_app/.MainActivity --ez enable-dart-profiling true
+# app目录
 READING_PROXY_URL='' ../scripts/flutterw attach --profile -d <设备ID>
 ```
+
+连接等待时先确认手机已解锁、Reading在前台及电源状态为Awake，再按当前Reading PID筛选日志，确认新的VM服务地址与端口；不复用重启前的服务地址或其他应用的Flutter日志。熄屏/休眠会中断本次手机上的采集；测量期间可临时保持插线亮屏，但须先记录并在结束/失败后恢复原设置。若手机本机RPC正常、电脑转发请求超时，属于采集连接待排查，不能据此判定应用卡死；可通过ADB在手机本机读取VM时间线作诊断，保存原始事件并注明采集方式，不将等待时间算作开书耗时。
 
 按工具给出的DevTools入口录制/导出性能快照。记录设备/系统、刷新率、包版本/校验值、书籍稳定标识与大小、布局/字体、测量场景；不将原文或私人书库放进Git。分别测新进程首次开书、同会话重开、翻页/点词面板、书架滚动，先记录默认追踪，再为定位慢帧单独开启详细追踪。每场景重复三次，保留全部结果及首次/重开区别，不只挑最好的一次；结合屏幕刷新率看UI/Raster耗时与慢帧比例，记录峰值RSS和GC，不把Dart堆大小等同进程总内存。仍显示重新分页时核对缓存是否被预算拒绝，不先提高资源上限。
 
