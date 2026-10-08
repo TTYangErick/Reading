@@ -56,3 +56,20 @@ READING_PROXY_URL='' READING_BENCHMARK_OUTPUT=../artifacts/pagination-baseline.j
 - 所有12个样本/尺寸组合的物理页数与缓存接纳结果相同；普通/短段及混排总耗时变化在约±4%内，不据此声称普通段落明显提速或退化。长段耗时下降约68–80%。near-limit手机最大宿主心跳间隔中位数90.3→30.1ms；仍不是帧率验收，也并未消除全部长间隔。
 - 新增line_boundaries_test.dart以原TextPainter行边界与绘制几何作对照，覆盖72组固定文字/方向/样式/临界与种子混合字符组合。测试发现空行前含双向控制字符时，直接二分会与旧行合并不同；最终空行及相邻行沿用旧查询，保留源偏移和几何。测试不调用新的二分函数充当自己的预期。
 - 优化未改变单段拒绝限制、缓存预算、数据JSON或渲染完整段落的规则。大书缓存拒绝和首次完整分页仍是已知限制，后续是否调整须另作资源/内存评估。
+
+## GBK 测试运行时诊断
+
+`gbk_runtime_probe.dart` / `gbk_runtime_probe_test.dart` 是按需运行的最小对照，不计量性能、不属于常规测试。两入口执行同一固定输入的编码、解码、GBK/UTF-8 TXT解析，不加载应用数据库、UI或词典；每个阶段先输出标记，原生崩溃时可从最后一行确定进度。它只覆盖这个输入和首次编码入口，不能证明所有GBK路径或运行时均无问题。
+
+在app目录执行（`dart`应来自同一Flutter SDK）：
+
+```sh
+dart --version
+../scripts/flutterw --version
+dart --packages=.dart_tool/package_config.json benchmark/gbk_runtime_probe.dart
+READING_PROXY_URL='' ../scripts/flutterw test benchmark/gbk_runtime_probe_test.dart --no-pub --reporter expanded
+# 最小输入未复现后，按需对比原应用依赖组合
+READING_PROXY_URL='' ../scripts/flutterw test test/core_test.dart test/import_inbox_test.dart test/file_import_test.dart --no-pub --reporter expanded
+```
+
+采样前固定次数，每次独立启动进程，保留全部日志/退出码和源码revision、SDK/engine/Dart、OS/架构；不要在同一进程内循环codec当作多次冷启动。失败时先停止并保存最后阶段、Dart错误栈或macOS `~/Library/Logs/DiagnosticReports/flutter_tester-*.ips`；比较报告中的触发线程、镜像UUID与本机引擎，而非只比较“SIGSEGV”字样。产物放忽略的artifacts，当前结果与未关闭风险只记PLAN。最小输入通过后仍可能依赖完整测试组合、加载时序或其他输入；必要时仅补一次原配置全量并用`--reporter json`保存逐项事件，失败后先采证，不重跑到绿。仍未复现也不关闭间歇崩溃，不以关闭断言、串行全量或盲目更新依赖掩盖问题。

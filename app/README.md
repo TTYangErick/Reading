@@ -57,6 +57,8 @@ READING_PROXY_URL='' ../scripts/flutterw test integration_test/reading_flow_test
 
 首次分页性能诊断单独按需运行，样本、命令和测量边界见 [benchmark/README.md](benchmark/README.md)；不包含在常规全量测试，也不代替真机Profile。
 
+宿主GBK测试间歇崩溃的普通Dart/Flutter最小对照与采证入口见 [运行时诊断](benchmark/README.md#gbk-测试运行时诊断)；当前结论只见PLAN，不把一次通过当作问题已修复。
+
 原生构建按上述入口刷新插件配置；不要与会重新生成插件注册文件的其他Flutter任务并发。若Android Release报告 integration_test 插件缺失，先按正常入口构建（不要跳过pub刷新），不手改生成文件或把测试插件加入生产依赖。
 
 ## 代码与数据
