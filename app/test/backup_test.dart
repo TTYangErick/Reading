@@ -39,6 +39,8 @@ Future<String> seed(ReadingDatabase db) async {
       supplementaryDocuments: {
         'notes.xhtml': [const BookBlock('A note.')],
       },
+      authors: const ['Jane Austen', 'Coauthor'],
+      cover: 'OPS/img.png',
       assets: {
         'OPS/img.png': Uint8List.fromList([137, 80, 78, 71, 0, 255]),
       },
@@ -248,6 +250,8 @@ void main() {
       target = ReadingDatabase(NativeDatabase(file));
       expect(await snapshot(target), before);
       final book = (await target.book(id))!;
+      expect(book.content.authors, ['Jane Austen', 'Coauthor']);
+      expect(book.content.cover, 'OPS/img.png');
       expect(book.content.supplementaryDocuments, contains('notes.xhtml'));
       expect(PageAnchor.decode(book.location)!.row, 1);
       expect(

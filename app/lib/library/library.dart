@@ -16,6 +16,7 @@ import '../reader/reader.dart';
 import '../reader/settings.dart';
 import '../translate/cache_page.dart';
 import '../vocab/vocabulary_page.dart';
+import 'book_cover.dart';
 
 BookContent parseImportedFile((String, Uint8List) input) =>
     ParserRegistry([TxtParser(), EpubParser()]).parse(input.$1, input.$2);
@@ -554,7 +555,8 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
                               return Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Expanded(
+                                  SizedBox(
+                                    height: width * 1.4,
                                     child: GestureDetector(
                                       onTap: () => openBook(book),
                                       onLongPress: () => edit(book, false),
@@ -602,6 +604,20 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
                                       ),
                                     ],
                                   ),
+                                  if (book.content.authors.isNotEmpty) ...[
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      book.content.authors.join(' · '),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .onSurfaceVariant,
+                                      ),
+                                    ),
+                                  ],
                                   const SizedBox(height: 4),
                                   Text(
                                     book.lastReadAt == 0
@@ -620,7 +636,7 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
                                   crossAxisCount: columns,
                                   crossAxisSpacing: 22,
                                   mainAxisSpacing: 26,
-                                  mainAxisExtent: width * 1.4 + 72,
+                                  mainAxisExtent: width * 1.4 + 92,
                                 ),
                           );
                         },
@@ -632,91 +648,6 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
               },
             ),
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class BookCover extends StatelessWidget {
-  final Book book;
-  const BookCover({super.key, required this.book});
-  @override
-  Widget build(BuildContext context) {
-    const colors = [
-      Color(0xFF53695D),
-      Color(0xFF756154),
-      Color(0xFF4C6270),
-      Color(0xFF806462),
-      Color(0xFF696078),
-    ];
-    final color =
-        colors[book.title.codeUnits.fold<int>(0, (a, b) => a + b) %
-            colors.length];
-    return Semantics(
-      button: true,
-      label: '阅读 ${book.title}',
-      child: Container(
-        width: double.infinity,
-        decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.circular(5),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x25000000),
-              blurRadius: 8,
-              offset: Offset(2, 4),
-            ),
-          ],
-        ),
-        child: Stack(
-          children: [
-            Positioned(
-              left: 5,
-              top: 0,
-              bottom: 0,
-              child: Container(width: 2, color: Colors.white12),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(22, 24, 16, 20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'READING LIBRARY',
-                    style: TextStyle(
-                      color: Colors.white60,
-                      fontSize: 7,
-                      letterSpacing: 1.4,
-                    ),
-                  ),
-                  const Spacer(),
-                  Text(
-                    book.title,
-                    maxLines: 5,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontFamily: 'Literata',
-                      color: Color(0xFFFFF6E9),
-                      fontSize: 20,
-                      height: 1.25,
-                    ),
-                  ),
-                  const Spacer(),
-                  Container(width: 25, height: 1, color: Colors.white54),
-                  const SizedBox(height: 10),
-                  const Text(
-                    'TEXT EDITION',
-                    style: TextStyle(
-                      fontSize: 7,
-                      letterSpacing: 1.6,
-                      color: Colors.white60,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
         ),
       ),
     );

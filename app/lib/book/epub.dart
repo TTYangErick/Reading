@@ -13,6 +13,8 @@ import 'book.dart';
 /// Reflowable EPUB 2/3. Book resources stay local and are never executed.
 class EpubParser implements BookParser {
   static const maxFileSize = 50 * 1024 * 1024;
+  static const maxCoverBytes = 5 * 1024 * 1024;
+  static const maxCoverDocumentBytes = 1024 * 1024;
   static const maxSupplementaryDocuments = 64;
   static const maxSupplementaryDocumentBytes = 1024 * 1024;
   // Includes newly loaded images; shared body assets are not counted twice.
@@ -294,7 +296,139 @@ class _Epub {
       anchors: anchors,
       supplementaryDocuments: supplementaryDocuments,
       title: elements(opf, 'title').firstOrNull?.innerText.trim(),
+      authors: readAuthors(opf),
+      cover: readCover(opfPath, opf, manifest),
     );
+  }
+
+  List<String> readAuthors(XmlDocument opf) {
+    final metadata = elements(opf, 'metadata').firstOrNull;
+    if (metadata == null) return const [];
+    final authors = <String>[];
+    for (final creator in elements(metadata, 'creator')) {
+      if (creator.name.namespaceUri != 'http://purl.org/dc/elements/1.1/') {
+        continue;
+      }
+      final id = creator.getAttribute('id');
+      final roles = [
+        for (final attribute in creator.attributes)
+          if (attribute.name.local == 'role') attribute.value.trim(),
+        if (id != null)
+          for (final meta in elements(metadata, 'meta'))
+            if (meta.getAttribute('property') == 'role' &&
+                meta.getAttribute('refines') == '#$id')
+              meta.innerText.trim(),
+      ].where((r) => r.isNotEmpty);
+      // Unspecified roles are common; explicit translators/editors aren't authors.
+      if (roles.isNotEmpty && !roles.any((r) => r == 'aut')) continue;
+      final name = clean(creator.innerText);
+      if (name.isEmpty || name.length > 256 || authors.contains(name)) continue;
+      authors.add(name);
+      if (authors.length == 16) break;
+    }
+    return authors;
+  }
+
+  String? coverPath(String base, String? href) {
+    if (href == null || href.trim().isEmpty) return null;
+    final uri = Uri.tryParse(href);
+    if (uri == null || uri.hasQuery || uri.hasScheme || uri.hasAuthority) {
+      return null;
+    }
+    try {
+      return resolve(base, href);
+    } on FormatException {
+      return null; // Optional bad metadata must not prevent reading the book.
+    }
+  }
+
+  String? loadCover(String base, XmlElement? item) {
+    if (item == null ||
+        !const {
+          'image/png',
+          'image/jpeg',
+          'image/gif',
+          'image/webp',
+        }.contains(item.getAttribute('media-type'))) {
+      return null;
+    }
+    return loadCoverPath(coverPath(base, item.getAttribute('href')));
+  }
+
+  String? loadCoverPath(String? path) {
+    final size = files[path]?.uncompressedSize ?? 0;
+    if (path == null || size <= 0 || size > EpubParser.maxCoverBytes) {
+      return null;
+    }
+    // data() still enforces declared/actual size and CRC. Do not swallow errors.
+    assets.putIfAbsent(path, () => data(path));
+    return path;
+  }
+
+  String? readCover(
+    String opfPath,
+    XmlDocument opf,
+    Map<String, XmlElement> manifest,
+  ) {
+    final marked = manifest.values
+        .where(
+          (e) => (e.getAttribute('properties') ?? '')
+              .split(RegExp(r'\s+'))
+              .contains('cover-image'),
+        )
+        .firstOrNull;
+    final modern = loadCover(opfPath, marked);
+    if (modern != null) return modern;
+    final metadata = elements(opf, 'metadata').firstOrNull;
+    final legacyId = metadata == null
+        ? null
+        : elements(metadata, 'meta')
+              .where((e) => e.getAttribute('name') == 'cover')
+              .firstOrNull
+              ?.getAttribute('content');
+    final legacy = loadCover(opfPath, manifest[legacyId]);
+    if (legacy != null) return legacy;
+    final guide = elements(opf, 'guide').firstOrNull;
+    final reference = guide == null
+        ? null
+        : elements(
+            guide,
+            'reference',
+          ).where((e) => e.getAttribute('type') == 'cover').firstOrNull;
+    final path = coverPath(opfPath, reference?.getAttribute('href'));
+    if (path == null) return null;
+    final pageItem = manifest.values
+        .where((e) => coverPath(opfPath, e.getAttribute('href')) == path)
+        .firstOrNull;
+    final direct = loadCover(opfPath, pageItem);
+    if (direct != null) return direct;
+    if (pageItem == null ||
+        !const {
+          'application/xhtml+xml',
+          'text/html',
+        }.contains(pageItem.getAttribute('media-type')) ||
+        (files[path]?.uncompressedSize ??
+                EpubParser.maxCoverDocumentBytes + 1) >
+            EpubParser.maxCoverDocumentBytes) {
+      return null;
+    }
+    final bytes = data(path); // Integrity errors still reject the archive.
+    final dom.Document page;
+    try {
+      page = html.parse(utf8.decode(bytes));
+    } on FormatException {
+      return null;
+    }
+    // Only an explicit guide cover page; no document walker, links or anchors.
+    final svg = page.querySelector('svg');
+    final source =
+        page.querySelector('img[src]')?.attributes['src'] ??
+        (svg == null ? null : svgImageSource(simpleSvgImage(svg)));
+    final imagePath = coverPath(path, source);
+    final imageItem = manifest.values
+        .where((e) => coverPath(opfPath, e.getAttribute('href')) == imagePath)
+        .firstOrNull;
+    return loadCover(opfPath, imageItem);
   }
 
   void readDocument(String path, List<BookBlock> output, {String? document}) {
@@ -445,6 +579,39 @@ class _Epub {
   }
 }
 
+// Shared eligibility for body and explicitly declared cover-page wrappers.
+dom.Element? simpleSvgImage(dom.Element svg) {
+  final images = svg.children.where((e) => e.localName == 'image').toList();
+  // Extract one raster image, not a partial rendering of arbitrary SVG.
+  // Reject composition/effects and never descend into scripts/foreignObject.
+  final simple =
+      images.length == 1 &&
+      svg.children.every(
+        (e) =>
+            const {'image', 'title', 'desc'}.contains(e.localName) &&
+            e.children.isEmpty,
+      ) &&
+      [svg, ...svg.children].every(
+        (e) => !const {
+          'transform',
+          'filter',
+          'mask',
+          'clip-path',
+          'style',
+          'hidden',
+        }.any(e.attributes.containsKey),
+      );
+  return simple ? images.single : null;
+}
+
+String? svgImageSource(dom.Element? image) =>
+    image?.attributes['href'] ??
+    image?.attributes[const dom.AttributeName(
+      'xlink',
+      'href',
+      'http://www.w3.org/1999/xlink',
+    )];
+
 String clean(String text) => text.replaceAll(RegExp(r'\s+'), ' ').trim();
 
 class _PendingLink {
@@ -591,35 +758,8 @@ class _Blocks {
   }
 
   void addSvgImage(dom.Element svg) {
-    final images = svg.children.where((e) => e.localName == 'image').toList();
-    // Extract one raster image, not a partial rendering of arbitrary SVG.
-    // Reject composition/effects and never descend into scripts/foreignObject.
-    final simple =
-        images.length == 1 &&
-        svg.children.every(
-          (e) =>
-              const {'image', 'title', 'desc'}.contains(e.localName) &&
-              e.children.isEmpty,
-        ) &&
-        [svg, ...svg.children].every(
-          (e) => !const {
-            'transform',
-            'filter',
-            'mask',
-            'clip-path',
-            'style',
-            'hidden',
-          }.any(e.attributes.containsKey),
-        );
-    final image = simple ? images.single : null;
-    // package:html stores foreign namespaced attributes as AttributeName keys.
-    final src =
-        image?.attributes['href'] ??
-        image?.attributes[const dom.AttributeName(
-          'xlink',
-          'href',
-          'http://www.w3.org/1999/xlink',
-        )];
+    final image = simpleSvgImage(svg);
+    final src = svgImageSource(image);
     if (image == null || src == null || src.trim().isEmpty) {
       blocks.add(const BookBlock('[图片：暂不支持此 SVG 图形]'));
       return;

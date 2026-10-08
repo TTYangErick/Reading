@@ -265,6 +265,10 @@ class ReadingBackup {
       assets.add(jsonEncode([row[0], path]));
     }
     for (final entry in books.entries) {
+      if (entry.value.cover != null &&
+          !assets.contains(jsonEncode([entry.key, entry.value.cover]))) {
+        _fail('备份缺少书籍封面资源。');
+      }
       for (final block in [
         ...entry.value.blocks,
         ...entry.value.supplementaryDocuments.values.expand((v) => v),

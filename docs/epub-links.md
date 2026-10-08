@@ -19,6 +19,15 @@
 - 兼容没有 links/anchors 的旧 TXT/EPUB JSON，也兼容上一版仅有正文链接的 JSON。旧书不会自动重解析，已存正文块和阅读位置不被改写。
 - 新书的补充页正文、简单表格、图片引用、链接范围和返回目标均可保存并重开；BLOB 随书籍沿用既有存取/删除路径。
 
+## 书架作者与封面
+
+- `BookContent.authors` 为可选作者列表，`cover` 为可选本地资源键；省略时分别为空列表/null，旧TXT/EPUB JSON不重写。沿用books.content JSON与book_assets BLOB，无数据库/schema迁移，不将图片字节写入JSON。手动书名仍由books.title拥有；作者/封面不改变正文、目录、锚点或阅读位置。
+- 从OPF metadata的Dublin Core creator按文档顺序提取、折叠空白并去重；无角色的creator沿用，有明确角色时须包含aut才作为作者，只有译者/编辑角色不误标。兼容EPUB2的opf:role与EPUB3 refines角色，最多16名、每名最多256个UTF-16单元，过长名称忽略。依据见 [EPUB3 creator与角色](https://www.w3.org/TR/epub-33/#sec-opf-dccreator)。
+- 封面依次尝试：manifest中第一个cover-image标记、metadata的meta name=cover所指manifest ID、guide中第一个type=cover引用。前两者须为本地PNG/JPEG/GIF/WebP；guide可直接指图片或manifest中本地HTML/XHTML，提取img或已支持的单张栅格SVG包装。不会猜测正文第一张图，不渲染通用SVG、不扫描其他页面、不遍历封面链接。标记依据见 [EPUB3 cover-image](https://www.w3.org/TR/epub-33/#sec-cover-image)，旧meta约定见 [IDPF样本](https://github.com/IDPF/epub3-samples/blob/main/30/page-blanche/EPUB/package.opf)。
+- 仅封面新增资源最多5MiB，封面HTML最多1MiB；读取前检查声明大小，读取仍用原解压/实际大小/CRC检查，校验损坏继续拒绝整次导入。缺失、空资源、外链、查询参数、越界路径、超限、不支持格式忽略可选封面；坏图解码回退文字封面，不影响读正文。已有正文图片不重复存储，原整书与补充页限额不放宽。
+- 书架沿用现有卡片和文字封面，作者以一行弱化文字显示，缺作者不造数据。图片按比例完整显示、限制解码至512×768范围且不放大源图；按可见卡片异步读取，不随书架全量读取BLOB；卡片销毁或换书时驱逐其缩略图缓存，避免小缩略图的MemoryImage键长期持有较大的原始字节。重新载入书架数据时同ID/路径也重新取图，覆盖备份替换场景。旧书没有原文件时不自动补作者/封面；重新导入才解析新元数据。
+- 备份保存原始JSON与封面BLOB，预检检查cover对应资源存在；缺失时拒绝恢复，沿用现有事务替换和资源路径限制。自动回归入口：epub_metadata_test.dart、library_metadata_test.dart与backup_test.dart；原生视觉验收状态只见PLAN。
+
 ## 链接解析
 
 - 提取普通文字中的 `<a href>`，识别 `epub:type=noteref/backlink` 和 `role=doc-noteref/doc-backlink`。没有语义标记的 EPUB 2 链接保留为普通链接，也能触发补充页加载，不靠文字猜测脚注。

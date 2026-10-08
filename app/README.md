@@ -43,7 +43,8 @@ READING_PROXY_URL='' ../scripts/flutterw test integration_test/reading_flow_test
 
 ## 代码与数据
 
-- `lib/book`：可替换 BookParser，UTF-8/GBK TXT 和可重排 EPUB 2/3 解析、目录及图片资源。
+- `lib/book`：可替换 BookParser，UTF-8/GBK TXT 和可重排 EPUB 2/3 解析、目录、作者与本地封面/图片资源。
+- `lib/library`：书架、导入与管理，EPUB作者/封面展示；旧书或缺图沿用文字封面，识别与资源边界见 [阅读契约](../docs/epub-links.md#书架作者与封面)。
 - `lib/text`：LanguageSupport，英文点词范围、句子范围及候选词。
 - `lib/dict`：DictionaryProvider，组合只读 ECDICT 英汉与 Wiktionary 英英；词形、来源和释义顺序查询。
 - `lib/db`：drift 业务数据库，书架/正文/段落索引/设置/译文缓存；不修改词典包。

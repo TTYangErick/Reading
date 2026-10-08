@@ -129,6 +129,9 @@ class BookContent {
   final Map<String, List<BookBlock>> supplementaryDocuments;
   final String encoding, format;
   final String? title;
+  final List<String> authors;
+  // Optional shelf image, using the same local asset keys as body images.
+  final String? cover;
   final List<BookChapter> chapters;
   final List<BookLink> links;
   // Canonical package path, optionally followed by #decoded-id.
@@ -141,6 +144,8 @@ class BookContent {
     this.encoding = 'UTF-8',
     this.format = 'txt',
     this.title,
+    this.authors = const [],
+    this.cover,
     this.chapters = const [],
     this.links = const [],
     this.anchors = const {},
@@ -164,6 +169,8 @@ class BookContent {
     'encoding': encoding,
     'format': format,
     'title': title,
+    if (authors.isNotEmpty) 'authors': authors,
+    if (cover != null) 'cover': cover,
     'chapters': chapters.map((c) => c.toJson()).toList(),
     if (links.isNotEmpty) 'links': links.map((l) => l.toJson()).toList(),
     if (anchors.isNotEmpty)
@@ -182,6 +189,8 @@ class BookContent {
       encoding: j['encoding'] as String? ?? 'UTF-8',
       format: j['format'] as String? ?? 'txt',
       title: j['title'] as String?,
+      authors: (j['authors'] as List? ?? []).cast<String>().toList(),
+      cover: j['cover'] as String?,
       chapters: (j['chapters'] as List? ?? [])
           .map((x) => BookChapter.fromJson(x as Map<String, dynamic>))
           .toList(),
