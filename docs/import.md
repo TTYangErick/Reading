@@ -6,6 +6,7 @@ Reading 支持 EPUB 2/3 和 TXT；现有书架文件选择、粘贴文本入口�
 
 - iPhone/iPad：注册 EPUB `org.idpf.epub-container` 与 TXT `public.plain-text` 文档类型，接收文件 App 或其他提供文件的 App 的“用 Reading 打开”。SceneDelegate 覆盖冷启动与已运行时的文件 URL；关闭 Flutter 默认深链接路由，避免文件路径成为页面路由。使用 security-scoped 访问与 NSFileCoordinator，只读复制，不修改原文件。
 - Android：接收 `ACTION_VIEW` 的 `content://` EPUB/TXT 和 `ACTION_SEND` 单文件（EXTRA_STREAM 或单项 ClipData）。分享 MIME 为 EPUB、纯文本或通用二进制；二进制仍须文件名是 `.epub`/`.txt`。打开入口仅声明 EPUB/纯文本，避免抢占所有二进制文件。缺扩展名时，仅可信的已知 MIME 可补扩展名；明确不支持的扩展名不会被 MIME 覆盖。拒绝 `file://`，不增加存储权限。冷启动与 onNewIntent 都接入，Activity 恢复不重复接收旧 Intent。
+- Android主Activity使用`singleTask`及应用默认task affinity，使从其他任务打开/分享的文件交给现有`onNewIntent`，保留当前Flutter阅读/设置页面，避免创建第二个引擎和独立书架。进程已结束时仍从`onCreate`接收；系统文件选择器返回继续沿用原结果回调。不能仅靠`singleTop`保证跨任务复用。启动行为依据[Android任务与返回栈](https://developer.android.com/guide/components/activities/tasks-and-back-stack)。
 - 首版不包含 iOS Share Extension、批量文件、分享网页/网络下载或纯文字 EXTRA_TEXT；纯文字沿用粘贴入口。来源 App 必须交付可读取的文件和必要权限；系统是否显示入口取决于它交付的类型。
 
 ## 交互与数据边界
