@@ -104,16 +104,17 @@ Android本地优化测试包（在app目录）：
 
 ## 集中交付与真机性能记录
 
-此处是操作入口；待验项目和结论只维护在PLAN。构建/准备样本不会安装应用：
+此处是操作入口；待验项目和结论只维护在PLAN。仓库根目录执行下列命令，仅构建和核验，不安装应用：
 
 ```sh
-# 仓库根目录：重建三份小型封面/作者功能样本
-python3 scripts/make_shelf_fixture.py
-# app目录：准备Android ARM64性能测量包
-../scripts/flutterw build apk --profile --target-platform android-arm64 --split-per-abi -P force-version-code-ignoring-abi=true
+python3 scripts/prepare_delivery.py
+# 此后可单独核验已生成目录（实际路径由准备命令输出）
+python3 scripts/prepare_delivery.py --verify 'artifacts/delivery/reading-版本-源码短revision'
 ```
 
-Profile产物为 `build/app/outputs/flutter-apk/app-arm64-v8a-profile.apk`。Release用于通常的体验检查；Profile用于连接DevTools采集UI/Raster帧耗时、CPU及内存，不以Debug包或宿主基准判定真机流畅度。依据和工具入口见 [Flutter性能测量](https://docs.flutter.dev/perf/ui-performance)、[DevTools Performance](https://docs.flutter.dev/tools/devtools/performance)。
+准备命令要求应用源码及样本已提交（保留本机未跟踪Gradle运行时配置），顺序构建同一revision的Release/Profile，检查版本/包名/ARM64/签名、两包身份一致及内置词典的固定manifest/SHA，然后复制两包和五份既有EPUB样本，生成记录源码、大小和SHA的manifest。已有目标目录会拒绝覆盖；失败仅清理本次临时目录，旧交付保留。目录在忽略的artifacts内，不是跨机器恢复前提；换机器可由已提交源码、词库恢复入口及此脚本重建。需要本机Android SDK build-tools及可用JDK；脚本沿用JAVA_HOME，未设置时使用现有macOS Android Studio JDK，不安装运行时。
+
+构建原件仍在 `build/app/outputs/flutter-apk/app-arm64-v8a-{release,profile}.apk`；交付使用准备命令输出的固定副本，后续构建不会覆盖副本。Release用于通常的体验检查；Profile用于连接DevTools采集UI/Raster帧耗时、CPU及内存，不以Debug包或宿主基准判定真机流畅度。依据和工具入口见 [Flutter性能测量](https://docs.flutter.dev/perf/ui-performance)、[DevTools Performance](https://docs.flutter.dev/tools/devtools/performance)。
 
 用户安排安装后，先读取新的设备/当前包版本与签名、书库/位置/设置基线；同应用标识、同签名且不降级才正常覆盖更新。不卸载、不清库、不在用户设备运行flutter test -d；无法读取一致基线时先解决基线，不用旧快照替代。需完整业务快照时先通过应用导出备份；原始SQLite复制必须包含当次WAL并保证一致性。备份替换验收用专用环境。
 
