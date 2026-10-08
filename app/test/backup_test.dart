@@ -17,6 +17,7 @@ import 'package:reading_app/core/providers.dart';
 import 'package:reading_app/db/database.dart';
 import 'package:reading_app/main.dart';
 import 'package:reading_app/startup/preferences.dart';
+import 'package:reading_app/orientation/orientation.dart';
 import 'package:reading_app/reader/reader.dart';
 import 'package:reading_app/reader/book_pagination.dart';
 import 'package:reading_app/reader/style.dart';
@@ -461,8 +462,13 @@ void main() {
         await t.runAsync(() async {
           await seed(source);
           await source.setSetting(resumeReadingKey, '1');
+          await source.setSetting(readingOrientationKey, 'landscape');
           await db.addBook('Current', const BookContent([BookBlock('text')]));
           expect(await container.read(resumeReadingProvider.future), false);
+          expect(
+            await container.read(readingOrientationProvider.future),
+            ReadingOrientation.system,
+          );
           picker.selection = MemoryFile(await BackupStore(source).export());
         });
         final before = await t.runAsync(() => snapshot(db));
@@ -553,6 +559,10 @@ void main() {
         );
         expect((await container.read(globalStyleProvider.future)).size, 23);
         expect(await container.read(resumeReadingProvider.future), true);
+        expect(
+          await container.read(readingOrientationProvider.future),
+          ReadingOrientation.landscape,
+        );
         expect(find.byType(ReaderPage), findsNothing);
         await t.tap(find.byType(BackButton));
         await t.pumpAndSettle();

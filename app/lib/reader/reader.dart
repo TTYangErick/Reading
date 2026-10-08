@@ -15,6 +15,8 @@ import '../search/book_search.dart';
 import '../search/search_page.dart';
 import '../core/providers.dart';
 import '../core/reader_system_ui.dart';
+import '../orientation/orientation.dart';
+import '../orientation/settings.dart';
 import '../dict/dictionary.dart';
 import '../text/language.dart';
 import '../translate/sentence_sheet.dart';
@@ -914,6 +916,7 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
       isScrollControlled: true,
       showDragHandle: true,
       builder: (_) => ReaderSettings(
+        orientationSetting: const ReadingOrientationSetting(),
         style: style,
         perBook: perBook,
         onChanged: (value) => changeStyle(value, perBook),
@@ -1218,7 +1221,10 @@ class _ReaderPageState extends ConsumerState<ReaderPage>
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) =>
+      ReadingOrientationScope(child: buildReader(context));
+
+  Widget buildReader(BuildContext context) {
     syncMode(MediaQuery.sizeOf(context));
     final palette = style.palette(MediaQuery.platformBrightnessOf(context));
     final progress = paged && pageCount > 0

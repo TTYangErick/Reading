@@ -10,6 +10,7 @@ import 'package:reading_app/core/providers.dart';
 import 'package:reading_app/db/database.dart';
 import 'package:reading_app/dict/dictionary.dart';
 import 'package:reading_app/main.dart';
+import 'package:reading_app/orientation/orientation.dart';
 import 'package:reading_app/reader/bubble.dart';
 import 'package:reading_app/reader/reader.dart';
 import 'package:reading_app/reader/settings.dart';
@@ -80,6 +81,7 @@ void main() {
     BookContent content, {
     int position = 0,
     ReaderStyle style = const ReaderStyle(paged: false),
+    ReadingOrientationSession? orientation,
   }) async {
     tester.view.physicalSize = const Size(402, 874);
     tester.view.devicePixelRatio = 1;
@@ -93,6 +95,8 @@ void main() {
       ProviderScope(
         overrides: [
           databaseProvider.overrideWithValue(database),
+          if (orientation != null)
+            readingOrientationSessionProvider.overrideWithValue(orientation),
           dictionaryProvider.overrideWith((_) async => dictionary),
         ],
         child: MaterialApp(
@@ -244,6 +248,21 @@ void main() {
   testWidgets(
     'nested notes return one level or close all, and retain theme and media',
     (tester) async {
+      tester.view.display.size = const Size(402, 874);
+      tester.view.display.devicePixelRatio = 1;
+      addTearDown(tester.view.display.resetSize);
+      addTearDown(tester.view.display.resetDevicePixelRatio);
+      final orientations = <List<DeviceOrientation>>[];
+      final orientation = ReadingOrientationSession(
+        (value) async => orientations.add(value),
+      );
+      addTearDown(() async {
+        orientation.dispose();
+        await tester.pump();
+      });
+      await tester.runAsync(
+        () => database.setSetting(readingOrientationKey, 'portrait'),
+      );
       final content = EpubParser().parse(
         supplementaryBook('<p><a href="a.xhtml#n">Start</a></p>', {
           'a.xhtml': notePage(
@@ -260,7 +279,14 @@ void main() {
         followSystem: false,
         size: 25,
       );
-      await mount(tester, content, style: style);
+      await mount(tester, content, style: style, orientation: orientation);
+      await tester.runAsync(
+        () =>
+            ProviderScope.containerOf(tester.element(find.byType(ReaderPage)))
+                .read(readingOrientationProvider.future),
+      );
+      await tester.pumpAndSettle();
+      expect(orientations.last, ReadingOrientation.portrait.orientations);
       await tapText(tester, 0, 'Start');
       expect(
         tester
@@ -287,13 +313,17 @@ void main() {
       await tester.tap(find.byTooltip('返回上一处'));
       await tester.pumpAndSettle();
       expect(textPoint(tester, 0, 'Next').dy, closeTo(notePoint.dy, .1));
+      expect(orientations.last, ReadingOrientation.portrait.orientations);
       await tapText(tester, 0, 'Next');
       await tester.tap(find.byTooltip('回到原阅读处'));
       await tester.pumpAndSettle();
       expect(paragraph(tester, 0).text.toPlainText(), 'Start');
       expect(wakeCalls, 1);
       expect((await database.book(bookId))!.position, 0);
+      expect(orientations.last, ReadingOrientation.portrait.orientations);
       await unmount(tester);
+      await orientation.pending;
+      expect(orientations.last, isEmpty);
     },
   );
 

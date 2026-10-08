@@ -7,12 +7,14 @@ class ReaderSettings extends StatefulWidget {
   final bool perBook;
   final ValueChanged<ReaderStyle> onChanged;
   final ValueChanged<bool>? onPerBook;
+  final Widget? orientationSetting;
   const ReaderSettings({
     super.key,
     required this.style,
     required this.onChanged,
     this.perBook = false,
     this.onPerBook,
+    this.orientationSetting,
   });
   @override
   State<ReaderSettings> createState() => _ReaderSettingsState();
@@ -125,6 +127,7 @@ class _ReaderSettingsState extends State<ReaderSettings> {
                 update(wide ? 'landscapePaged' : 'paged', value.first),
           ),
           const SizedBox(height: 16),
+          if (widget.orientationSetting != null) widget.orientationSetting!,
           DropdownButtonFormField<String>(
             isExpanded: true,
             key: ValueKey('font-${style.font}'),

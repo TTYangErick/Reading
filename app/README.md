@@ -11,6 +11,10 @@
 
 在书架“更多 → 启动设置”开启“启动时继续阅读”，下次启动可直接打开最近读过且仍在书架的书。默认关闭；返回书架或切回App不会再次自动打开。外部待导入文件优先，完整规则见 [启动契约](../docs/startup.md)。
 
+## 阅读方向
+
+阅读时可在“阅读设置 → 阅读方向”选择手机横竖屏；离开阅读恢复系统方向。iPad及大屏保留窗口/多任务能力，跟随系统，可用系统旋转锁定。规则与兼容边界见 [阅读方向](../docs/orientation.md)。
+
 ## 重建与运行
 
 从 Reading 根目录执行：
@@ -63,6 +67,7 @@ READING_PROXY_URL='' ../scripts/flutterw test integration_test/reading_flow_test
 - `lib/backup`：单文件备份、限额/完整性预检、确认与事务恢复。
 - `lib/core`：Riverpod 依赖、平台沉浸模式。
 - `lib/startup`：可选启动续读与全局开关，复用书架书籍对象及阅读位置，不增加每书样式字段。
+- `lib/orientation`：全局阅读方向偏好、嵌套阅读会话和系统方向请求，不保存正文位置。
 - `lib/translate`：Apple Translation / Android ML Kit 原生接口、句子面板和缓存管理；模型需先下载，Apple 翻译需 iOS/iPadOS 18+ 真机。
 
 数据仅保存在 App 的 Application Support 目录。卸载 App 会清除本地书架；书架“更多 → 备份与恢复”可保存和导入 `.readingbackup` 文件；预检与确认后整库替换，不合并。备份业务数据与图片的具体范围、兼容规则和限额见 [备份与恢复](../docs/backup.md)。

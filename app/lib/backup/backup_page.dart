@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/providers.dart';
 import '../startup/preferences.dart';
+import '../orientation/orientation.dart';
 import 'backup.dart';
 
 class BackupPage extends ConsumerStatefulWidget {
@@ -102,6 +103,7 @@ class _BackupPageState extends ConsumerState<BackupPage> {
         ref.invalidate(globalStyleProvider);
         ref.invalidate(readingGuideSeenProvider);
         ref.invalidate(resumeReadingProvider);
+        ref.invalidate(readingOrientationProvider);
         setState(
           () => status =
               '已恢复 ${backup.count('books')} 本书、${backup.count('vocabulary')} 条生词和 ${backup.count('bookmarks')} 个书签。返回书架即可继续阅读。',
