@@ -16,6 +16,8 @@ import 'package:reading_app/bookmarks/bookmark.dart';
 import 'package:reading_app/core/providers.dart';
 import 'package:reading_app/db/database.dart';
 import 'package:reading_app/main.dart';
+import 'package:reading_app/startup/preferences.dart';
+import 'package:reading_app/reader/reader.dart';
 import 'package:reading_app/reader/book_pagination.dart';
 import 'package:reading_app/reader/style.dart';
 import 'package:reading_app/translate/translator.dart';
@@ -458,7 +460,9 @@ void main() {
         });
         await t.runAsync(() async {
           await seed(source);
+          await source.setSetting(resumeReadingKey, '1');
           await db.addBook('Current', const BookContent([BookBlock('text')]));
+          expect(await container.read(resumeReadingProvider.future), false);
           picker.selection = MemoryFile(await BackupStore(source).export());
         });
         final before = await t.runAsync(() => snapshot(db));
@@ -548,9 +552,12 @@ void main() {
           await t.runAsync(() => snapshot(source)),
         );
         expect((await container.read(globalStyleProvider.future)).size, 23);
+        expect(await container.read(resumeReadingProvider.future), true);
+        expect(find.byType(ReaderPage), findsNothing);
         await t.tap(find.byType(BackButton));
         await t.pumpAndSettle();
         expect(find.text('Book 😀'), findsWidgets);
+        expect(find.byType(ReaderPage), findsNothing);
         expect(find.text('Current'), findsNothing);
         expect(t.takeException(), isNull);
       },

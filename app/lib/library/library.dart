@@ -16,6 +16,7 @@ import '../onboarding/reading_guide.dart';
 import '../reader/reader.dart';
 import '../reader/settings.dart';
 import '../translate/cache_page.dart';
+import '../startup/preferences.dart';
 import '../vocab/vocabulary_page.dart';
 import 'book_cover.dart';
 
@@ -298,7 +299,14 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
             tooltip: '更多',
             icon: const Icon(Icons.more_horiz),
             onSelected: (value) {
-              if (value == 'reading-guide') {
+              if (value == 'startup') {
+                showModalBottomSheet<void>(
+                  context: context,
+                  showDragHandle: true,
+                  isScrollControlled: true,
+                  builder: (_) => const StartupSettings(),
+                );
+              } else if (value == 'reading-guide') {
                 Navigator.push(
                   context,
                   MaterialPageRoute<void>(
@@ -345,6 +353,7 @@ class _LibraryPageState extends ConsumerState<LibraryPage> {
                 value: 'reading-guide',
                 child: Text('阅读与离线准备'),
               ),
+              const PopupMenuItem(value: 'startup', child: Text('启动设置')),
               const PopupMenuItem(value: 'backup', child: Text('备份与恢复')),
               const PopupMenuItem(value: 'vocabulary', child: Text('生词本')),
               const PopupMenuItem(value: 'history', child: Text('查词历史')),

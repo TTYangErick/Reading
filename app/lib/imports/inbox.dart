@@ -57,11 +57,12 @@ class ImportInbox extends Notifier<List<IncomingBook>> {
     return const [];
   }
 
-  Future<void> refresh() async {
+  /// False means the latest inbox state could not be confirmed.
+  Future<bool> refresh() async {
     final revision = ++_revision;
     try {
       final items = await importChannel.invokeListMethod<Object?>('pending');
-      if (_disposed || revision != _revision) return;
+      if (_disposed || revision != _revision) return false;
       final nativeIds = <String>{};
       state = [
         for (final value in items ?? const [])
@@ -79,10 +80,13 @@ class ImportInbox extends Notifier<List<IncomingBook>> {
       // Retain only IDs whose native cleanup failed; ordinary imports do not
       // accumulate a second unbounded history in memory.
       _released.retainAll(nativeIds);
+      return true;
     } on MissingPluginException {
       // Desktop/widget hosts have no mobile file receiver.
+      return true;
     } on PlatformException {
       // Keep the last usable snapshot on transient engine/channel failures.
+      return false;
     }
   }
 

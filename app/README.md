@@ -1,11 +1,15 @@
 # Reading Flutter App
 
-支持 EPUB 2/3、TXT／粘贴及外部文件导入、书架、英汉/英英离线查词、单页/双页和滚动阅读、脚注、目录、图片、简单表格、样式与精确位置保存，以及原生句子翻译和译文缓存管理。
+支持 EPUB 2/3、TXT／粘贴及外部文件导入、书架、可选启动续读、英汉/英英离线查词、单页/双页和滚动阅读、脚注、目录、图片、简单表格、样式与精确位置保存，以及原生句子翻译和译文缓存管理。
 完整执行状态和验收结果只见上层 `PLAN.md`；原计划见 `../docs/original-plan.md`。
 
 ## 从其他 App 导入
 
 在 iPhone/iPad 的文件 App 选择 EPUB/TXT，使用“用 Reading 打开”；Android 可从文件管理器打开或分享单个 EPUB/TXT 给 Reading。回到书架，确认待导入卡片即可添加；也可忽略。正在读书时只接收，不会跳走。待处理文件不跨应用进程保存，必要时重新分享；V1不接收批量文件或网页链接。完整入口、限制和兼容规则见 [导入契约](../docs/import.md)，真实系统投递验收状态见PLAN。
+
+## 启动时继续阅读
+
+在书架“更多 → 启动设置”开启“启动时继续阅读”，下次启动可直接打开最近读过且仍在书架的书。默认关闭；返回书架或切回App不会再次自动打开。外部待导入文件优先，完整规则见 [启动契约](../docs/startup.md)。
 
 ## 重建与运行
 
@@ -58,6 +62,7 @@ READING_PROXY_URL='' ../scripts/flutterw test integration_test/reading_flow_test
 - `lib/reader`：单/双页排版、正文与脚注位置、字形矩形定位、气泡、阅读设置。
 - `lib/backup`：单文件备份、限额/完整性预检、确认与事务恢复。
 - `lib/core`：Riverpod 依赖、平台沉浸模式。
+- `lib/startup`：可选启动续读与全局开关，复用书架书籍对象及阅读位置，不增加每书样式字段。
 - `lib/translate`：Apple Translation / Android ML Kit 原生接口、句子面板和缓存管理；模型需先下载，Apple 翻译需 iOS/iPadOS 18+ 真机。
 
 数据仅保存在 App 的 Application Support 目录。卸载 App 会清除本地书架；书架“更多 → 备份与恢复”可保存和导入 `.readingbackup` 文件；预检与确认后整库替换，不合并。备份业务数据与图片的具体范围、兼容规则和限额见 [备份与恢复](../docs/backup.md)。
