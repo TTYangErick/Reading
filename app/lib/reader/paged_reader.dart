@@ -4,12 +4,15 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/scheduler.dart';
 
 import '../book/book.dart';
 import '../text/language.dart';
 import 'book_pagination.dart';
 import 'paragraph.dart';
 import 'pagination_cache.dart';
+import 'selection.dart';
+import 'selection_paging.dart';
 import 'style.dart';
 
 typedef PageGeometry = ({
@@ -80,6 +83,18 @@ class PagedReader extends StatefulWidget {
 
 class PagedReaderState extends State<PagedReader> {
   final sourceCellKey = GlobalKey();
+  final selectionViewportKey = GlobalKey();
+  ReadingSelection? selectionGroup;
+  int? selectionOriginPage;
+  late final selectionTurner = SelectionPageTurner(
+    viewport: () {
+      final render = selectionViewportKey.currentContext?.findRenderObject();
+      return render is RenderBox && render.hasSize
+          ? render.localToGlobal(Offset.zero) & render.size
+          : null;
+    },
+    onTurn: turnSelection,
+  );
   late PageAnchor anchor = widget.initialAnchor;
   BookPagination? layout;
   PageController? controller;
@@ -100,7 +115,9 @@ class PagedReaderState extends State<PagedReader> {
       '${visiblePages.first + 1}${visiblePages.length > 1 ? '–${visiblePages.last + 1}' : ''} / ${layout!.pages.length}';
   String? get chapterTitle {
     if (widget.document != null || layout == null) return null;
-    final block = anchor.position.block;
+    final block = selectionOriginPage == null
+        ? anchor.position.block
+        : layout!.pages[page].start.position.block;
     BookChapter? current;
     for (final chapter in widget.content.contents) {
       if (chapter.block <= block &&
@@ -126,6 +143,108 @@ class PagedReaderState extends State<PagedReader> {
       : widget.content.supplementaryDocuments[widget.document]!;
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final group = ReadingSelectionScope.maybeOf(context);
+    if (group == selectionGroup) return;
+    detachSelection();
+    selectionGroup = group;
+    if (group != null) {
+      group.paging = selectionTurner;
+      group.visibleSpans = () => spansFor(visiblePages);
+      group.onSessionEnd = restoreSelectionPage;
+    }
+  }
+
+  void detachSelection() {
+    final group = selectionGroup;
+    if (group != null && identical(group.paging, selectionTurner)) {
+      group.onSessionEnd = null;
+      group.cancel();
+      group.paging = null;
+      group.visibleSpans = null;
+    }
+    selectionTurner.stop();
+    selectionOriginPage = null;
+  }
+
+  Iterable<SelectionSpan> spansFor(Iterable<int> pages) sync* {
+    if (layout == null) return;
+    for (final index in pages) {
+      for (final fragment in layout!.pages[index].fragments) {
+        if (fragment is PageTextFragment &&
+            fragment.anchor.part == PagePart.text) {
+          yield (
+            block: fragment.anchor.position.block,
+            start: fragment.anchor.position.offset,
+            end: fragment.endOffset,
+          );
+        }
+      }
+    }
+  }
+
+  Future<bool> turnSelection(int direction) async {
+    final group = selectionGroup, currentLayout = layout;
+    if (!mounted ||
+        group == null ||
+        currentLayout == null ||
+        controller?.hasClients != true ||
+        hasOverflow) {
+      return false;
+    }
+    final target = spread + direction;
+    if (target < 0 || target >= spreadCount) return false;
+    final indexes = List.generate(
+      columns,
+      (i) => target * columns + i,
+    ).where((i) => i < currentLayout.pages.length).toList();
+    if (indexes.any((i) => currentLayout.pages[i].overflows)) return false;
+    final spans = spansFor(indexes).toList();
+    if (spans.isEmpty) return false;
+    final edge = direction > 0 ? spans.first : spans.last;
+    if (!group.canTurnTo(edge, spans)) return false;
+    selectionOriginPage ??= page;
+    final session = group.session, token = generation;
+    group.turningPage = true;
+    setState(() => page = target * columns);
+    controller!.jumpToPage(target);
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted ||
+        token != generation ||
+        session != group.session ||
+        !identical(layout, currentLayout)) {
+      return false;
+    }
+    group.arriveAt(edge, spans);
+    return true;
+  }
+
+  void restoreSelectionPage() {
+    final original = selectionOriginPage;
+    selectionOriginPage = null;
+    if (original == null) return;
+    final token = generation, currentController = controller;
+    void restore() {
+      if (!mounted ||
+          token != generation ||
+          !identical(controller, currentController) ||
+          currentController?.hasClients != true) {
+        return;
+      }
+      setState(() => page = original);
+      currentController!.jumpToPage(original ~/ columns);
+    }
+
+    if (SchedulerBinding.instance.schedulerPhase ==
+        SchedulerPhase.persistentCallbacks) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => restore());
+    } else {
+      restore();
+    }
+  }
+
+  @override
   void didUpdateWidget(covariant PagedReader oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.document != widget.document ||
@@ -133,6 +252,7 @@ class PagedReaderState extends State<PagedReader> {
         oldWidget.cacheContent != widget.cacheContent ||
         (widget.cacheContent == null &&
             !identical(oldWidget.content, widget.content))) {
+      selectionGroup?.cancel();
       generation++;
       geometry = null;
       imageSizes = null;
@@ -142,6 +262,7 @@ class PagedReaderState extends State<PagedReader> {
 
   @override
   void dispose() {
+    detachSelection();
     generation++;
     finishEntryWait();
     controller?.dispose();
@@ -293,6 +414,7 @@ class PagedReaderState extends State<PagedReader> {
 
   void jumpPage(int index) {
     if (layout == null || controller?.hasClients != true) return;
+    selectionGroup?.cancel();
     widget.onTurn();
     final target = index.clamp(0, layout!.pages.length - 1);
     setState(() {
@@ -306,6 +428,7 @@ class PagedReaderState extends State<PagedReader> {
   void jump(BookPosition position) => jumpAnchor(PageAnchor(position));
 
   void jumpAnchor(PageAnchor value) {
+    selectionGroup?.cancel();
     anchor = normalized(value);
     final index =
         layout?.pageForAnchor(anchor) ??
@@ -319,6 +442,7 @@ class PagedReaderState extends State<PagedReader> {
 
   void turn(int delta) {
     if (layout == null || controller?.hasClients != true) return;
+    selectionGroup?.cancel();
     final target = (spread + delta).clamp(0, spreadCount - 1);
     if (target != spread) {
       controller!.animateToPage(
@@ -694,6 +818,7 @@ class PagedReaderState extends State<PagedReader> {
           locale: Localizations.maybeLocaleOf(context),
         );
         if (geometry != config) {
+          selectionGroup?.cancel();
           geometry = config;
           layout = null;
           error = null;
@@ -764,6 +889,7 @@ class PagedReaderState extends State<PagedReader> {
               // page-local whitespace. Text gestures still win their taps;
               // PageView continues to handle horizontal drags.
               child: GestureDetector(
+                key: selectionViewportKey,
                 behavior: HitTestBehavior.opaque,
                 onTap: widget.onBlank,
                 child: PageView.builder(
